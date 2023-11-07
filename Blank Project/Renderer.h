@@ -4,6 +4,7 @@
 
 class Camera;
 class SceneNode;
+class Light;
 
 class Renderer : public OGLRenderer	{
 public:
@@ -13,11 +14,15 @@ public:
 	 void UpdateScene(float msec)	override;
 protected:
 	void DrawSkybox();
+
+	void SetNodes();
 	void BuildNodeLists(SceneNode* from);
 	void SortNodeLists();
 	void ClearNodeLists();
 	void DrawNodes();
 	void DrawNode(SceneNode* n);
+
+	void AnimateScene(float dt);
 
 	Mesh* quad;
 	Mesh* sphere;
@@ -26,9 +31,14 @@ protected:
 	Shader* sceneShader;
 
 	SceneNode* root;
+	SceneNode* planetCore;
 	Camera* camera;
+	Light* light;
 
 	GLuint planetTexture;
+	GLuint planetBumpMap;
+	GLuint asteroidTexture;
+	GLuint asteroidBumpMap;
 	GLuint cubeMap;
 
 	Frustum frameFrustum;

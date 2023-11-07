@@ -33,6 +33,9 @@ public:
 	GLuint GetTexture() const { return texture; }
 	void SetTexture(GLuint tex) { texture = tex; }
 
+	GLuint GetBumpMap() const { return bumpMap; }
+	void SetBumpMap(GLuint tex) { bumpMap = tex; }
+
 	void AddChild(SceneNode* n);
 
 	virtual void Update(float dt);
@@ -56,5 +59,6 @@ protected:
 	float distanceFromCamera;
 	float boundingRadius;
 	GLuint texture;
+	GLuint bumpMap;
 };
 

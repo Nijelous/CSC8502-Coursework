@@ -72,6 +72,7 @@ protected:
 	}
 
 	void SetTextureRepeating(GLuint target, bool state);
+	void SetTextureMirrorRepeating(GLuint target, bool state);
 
 	Matrix4 projMatrix;		//Projection matrix
 	Matrix4 modelMatrix;	//Model matrix. NOT MODELVIEW

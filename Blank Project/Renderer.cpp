@@ -1,38 +1,44 @@
 #include "Renderer.h"
 #include "../nclgl/Camera.h"
 #include "../nclgl/SceneNode.h"
+#include "../nclgl/Light.h"
+#include <numbers>
 #include <algorithm>
+
+#define _USE_MATH_DEFINES
 
 Renderer::Renderer(Window &parent) : OGLRenderer(parent)	{
 	quad = Mesh::GenerateQuad();
 	sphere = Mesh::LoadFromMeshFile("Sphere.msh");
 
-	planetTexture = SOIL_load_OGL_texture(TEXTUREDIR"planet.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, 0);
+	planetTexture = SOIL_load_OGL_texture(TEXTUREDIR"planet.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
+	planetBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"planetDOT3.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
+
+	asteroidTexture = SOIL_load_OGL_texture(TEXTUREDIR"Barren Reds.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
+	asteroidBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"Barren RedsDOT3.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
 
 	cubeMap = SOIL_load_OGL_cubemap(
 		TEXTUREDIR"SkyBlue_right.png", TEXTUREDIR"SkyBlue_left.png",
 		TEXTUREDIR"SkyBlue_top.png", TEXTUREDIR"SkyBlue_bottom.png",
 		TEXTUREDIR"SkyBlue_front.png", TEXTUREDIR"SkyBlue_back.png", SOIL_LOAD_RGB, SOIL_CREATE_NEW_ID, 0);
 
-	if (!cubeMap || !planetTexture) return;
+	if (!cubeMap || !planetTexture || !planetBumpMap || !asteroidTexture || !asteroidBumpMap) return;
 
 	skyboxShader = new Shader("SkyboxVertex.glsl", "SkyboxFragment.glsl");
-	sceneShader = new Shader("SceneVertex.glsl", "SceneFragment.glsl");
+	sceneShader = new Shader("PerPixelSceneVertex.glsl", "PerPixelSceneFragment.glsl");
 
 	if (!skyboxShader->LoadSuccess() || !sceneShader->LoadSuccess()) return;
 
+	SetTextureMirrorRepeating(planetTexture, true);
+	SetTextureMirrorRepeating(planetBumpMap, true);
+
 	camera = new Camera(-45.0f, 0.0f, Vector3(0, 30, 175));
+
+	light = new Light(Vector3(100.0f, 100.0f, 100.0f), Vector4(1, 1, 1, 1), 100000.0f);
 
 	root = new SceneNode();
 
-	SceneNode* s = new SceneNode();
-	s->SetColour(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
-	s->SetTransform(Matrix4::Translation(Vector3(0, -500.0f, -500.0f)));
-	s->SetModelScale(Vector3(100.0f, 100.0f, 100.0f));
-	s->SetBoundingRadius(100.0f);
-	s->SetMesh(sphere);
-	s->SetTexture(planetTexture);
-	root->AddChild(s);
+	SetNodes();
 
 	projMatrix = Matrix4::Perspective(1.0f, 10000.0f, (float)width / (float)height, 45.0f);
 
@@ -50,6 +56,7 @@ Renderer::~Renderer(void)	{
 	delete sceneShader;
 	delete root;
 	delete camera;
+	delete light;
 }
 
 void Renderer::UpdateScene(float dt) {
@@ -57,7 +64,13 @@ void Renderer::UpdateScene(float dt) {
 	viewMatrix = camera->BuildViewMatrix();
 	frameFrustum.FromMatrix(projMatrix * viewMatrix);
 
+	planetCore->SetTransform(planetCore->GetTransform() * Matrix4::Rotation(-30.0f * dt, Vector3(0, 1, 0)));
+
 	root->Update(dt);
+}
+
+void Renderer::AnimateScene(float dt) {
+
 }
 
 void Renderer::RenderScene()	{
@@ -78,6 +91,36 @@ void Renderer::DrawSkybox() {
 
 	quad->Draw();
 	glDepthMask(GL_TRUE);
+}
+
+void Renderer::SetNodes() {
+	SceneNode* p = new SceneNode();
+	p->SetColour(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+	p->SetTransform(Matrix4::Translation(Vector3(0, -2000.0f, -2000.0f)));
+	p->SetModelScale(Vector3(1000.0f, 1000.0f, 1000.0f));
+	p->SetBoundingRadius(1000.0f);
+	p->SetMesh(sphere);
+	p->SetTexture(planetTexture);
+	p->SetBumpMap(planetBumpMap);
+	root->AddChild(p);
+
+	SceneNode* core = new SceneNode();
+	p->AddChild(core);
+	planetCore = core;
+
+	double pi = 2 * acos(0.0);
+	for (int i = 0; i < 8; i++) {
+		SceneNode* a = new SceneNode();
+		a->SetColour(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+		float angle = i * 2 * pi / 8;
+		a->SetTransform(Matrix4::Translation(Vector3(1300.0f * cos(angle), 0, 1300.0f * sin(angle))));
+		a->SetModelScale(Vector3(50.0f, 50.0f, 50.0f));
+		a->SetBoundingRadius(50.0f);
+		a->SetMesh(sphere);
+		a->SetTexture(asteroidTexture);
+		a->SetBumpMap(asteroidBumpMap);
+		core->AddChild(a);
+	}
 }
 
 void Renderer::BuildNodeLists(SceneNode* from) {
@@ -106,7 +149,12 @@ void Renderer::DrawNodes() {
 	BindShader(sceneShader);
 	glUniform1i(glGetUniformLocation(sceneShader->GetProgram(), "diffuseTex"), 0);
 
+	glUniform1i(glGetUniformLocation(sceneShader->GetProgram(), "bumpTex"), 1);
+
+	glUniform3fv(glGetUniformLocation(sceneShader->GetProgram(), "cameraPos"), 1, (float*)&camera->GetPosition());
+
 	UpdateShaderMatrices();
+	SetShaderLight(*light);
 	for (const auto& i : nodeList) DrawNode(i);
 	for (const auto& i : transparentNodeList) DrawNode(i);
 	ClearNodeLists();
@@ -124,7 +172,9 @@ void Renderer::DrawNode(SceneNode* n) {
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, texture);
 
-		glUniform1i(glGetUniformLocation(sceneShader->GetProgram(), "useTexture"), texture);
+		GLuint bumpMap = n->GetBumpMap();
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, bumpMap);
 
 		n->Draw(*this);
 	}
