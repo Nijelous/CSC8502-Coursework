@@ -131,7 +131,6 @@ Mesh* Mesh::GenerateQuad()
 
 	m->BufferData();
 	return m;
-
 }
 
 void UploadAttribute(GLuint* id, int numElements, int dataSize, int attribSize, int attribID, void* pointer, const string&debugName) {
