@@ -13,6 +13,9 @@ public:
 	 void RenderScene()				override;
 	 void UpdateScene(float msec)	override;
 protected:
+	void DrawShadowScene();
+	void DrawMainScene();
+
 	void DrawSkybox();
 
 	void SetNodes();
@@ -20,20 +23,23 @@ protected:
 	void SortNodeLists();
 	void ClearNodeLists();
 	void DrawNodes();
+	void DrawShadowNodes();
 	void DrawNode(SceneNode* n);
-
-	void AnimateScene(float dt);
 
 	Mesh* quad;
 	Mesh* sphere;
 
 	Shader* skyboxShader;
 	Shader* sceneShader;
+	Shader* shadowShader;
 
 	SceneNode* root;
 	SceneNode* planetCore;
 	Camera* camera;
 	Light* light;
+
+	GLuint shadowTex;
+	GLuint shadowFBO;
 
 	GLuint planetTexture;
 	GLuint planetBumpMap;

@@ -2,10 +2,9 @@
 #include "../nclgl/Camera.h"
 #include "../nclgl/SceneNode.h"
 #include "../nclgl/Light.h"
-#include <numbers>
 #include <algorithm>
 
-#define _USE_MATH_DEFINES
+#define SHADOWSIZE 2048
 
 Renderer::Renderer(Window &parent) : OGLRenderer(parent)	{
 	quad = Mesh::GenerateQuad();
@@ -26,15 +25,32 @@ Renderer::Renderer(Window &parent) : OGLRenderer(parent)	{
 
 	skyboxShader = new Shader("SkyboxVertex.glsl", "SkyboxFragment.glsl");
 	sceneShader = new Shader("PerPixelSceneVertex.glsl", "PerPixelSceneFragment.glsl");
+	shadowShader = new Shader("ShadowVert.glsl", "ShadowFrag.glsl");
 
-	if (!skyboxShader->LoadSuccess() || !sceneShader->LoadSuccess()) return;
+	if (!skyboxShader->LoadSuccess() || !sceneShader->LoadSuccess() || !shadowShader->LoadSuccess()) return;
+
+	glGenTextures(1, &shadowTex);
+	glBindTexture(GL_TEXTURE_2D, shadowTex);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOWSIZE, SHADOWSIZE, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+
+	glBindTexture(GL_TEXTURE_2D, 0);
+
+	glGenFramebuffers(1, &shadowFBO);
+	glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTex, 0);
+	glDrawBuffer(GL_NONE);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	SetTextureMirrorRepeating(planetTexture, true);
 	SetTextureMirrorRepeating(planetBumpMap, true);
 
 	camera = new Camera(-45.0f, 0.0f, Vector3(0, 30, 175));
 
-	light = new Light(Vector3(100.0f, 100.0f, 100.0f), Vector4(1, 1, 1, 1), 100000.0f);
+	light = new Light(Vector3(100.0f, 100.0f, 100.0f), Vector4(1, 1, 1, 1), 10000.0f);
 
 	root = new SceneNode();
 
@@ -51,6 +67,8 @@ Renderer::Renderer(Window &parent) : OGLRenderer(parent)	{
 }
 
 Renderer::~Renderer(void)	{
+	glDeleteTextures(1, &shadowTex);
+	glDeleteFramebuffers(1, &shadowFBO);
 	delete quad;
 	delete skyboxShader;
 	delete sceneShader;
@@ -69,10 +87,6 @@ void Renderer::UpdateScene(float dt) {
 	root->Update(dt);
 }
 
-void Renderer::AnimateScene(float dt) {
-
-}
-
 void Renderer::RenderScene()	{
 	BuildNodeLists(root);
 	SortNodeLists();
@@ -80,7 +94,28 @@ void Renderer::RenderScene()	{
 	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
 	DrawSkybox();
+	DrawShadowScene();
 	DrawNodes();
+}
+
+void Renderer::DrawShadowScene() {
+	glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
+
+	glViewport(0, 0, SHADOWSIZE, SHADOWSIZE);
+	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+
+	BindShader(shadowShader);
+
+	viewMatrix = Matrix4::BuildViewMatrix(light->GetPosition(), Vector3(0, 0, 0));
+	projMatrix = Matrix4::Perspective(1, 100, 1, 45);
+	shadowMatrix = projMatrix * viewMatrix;
+
+	DrawShadowNodes();
+
+	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+	glViewport(0, 0, width, height);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void Renderer::DrawSkybox() {
@@ -145,11 +180,23 @@ void Renderer::ClearNodeLists() {
 	nodeList.clear();
 }
 
+void Renderer::DrawShadowNodes() {
+	for (const auto& i : nodeList) i->Draw(*this);
+	for (const auto& i : transparentNodeList) i->Draw(*this);
+}
+
 void Renderer::DrawNodes() {
 	BindShader(sceneShader);
+	viewMatrix = camera->BuildViewMatrix();
+	projMatrix = Matrix4::Perspective(1.0f, 15000.0f, (float)width / (float)height, 45.0f);
 	glUniform1i(glGetUniformLocation(sceneShader->GetProgram(), "diffuseTex"), 0);
 
 	glUniform1i(glGetUniformLocation(sceneShader->GetProgram(), "bumpTex"), 1);
+
+	glUniform1i(glGetUniformLocation(sceneShader->GetProgram(), "shadowTex"), 2);
+
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_2D, shadowTex);
 
 	glUniform3fv(glGetUniformLocation(sceneShader->GetProgram(), "cameraPos"), 1, (float*)&camera->GetPosition());
 

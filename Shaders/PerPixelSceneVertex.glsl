@@ -3,7 +3,10 @@
 uniform mat4 modelMatrix;
 uniform mat4 viewMatrix;
 uniform mat4 projMatrix;
+uniform mat4 shadowMatrix;
 uniform vec4 nodeColour;
+
+uniform vec3 lightPos;
 
 in vec3 position;
 in vec2 texCoord;
@@ -17,6 +20,7 @@ out Vertex {
 	vec3 tangent;
 	vec3 binormal;
 	vec3 worldPos;
+	vec4 shadowProj;
 } OUT;
 
 void main(void){
@@ -28,7 +32,7 @@ void main(void){
 	vec3 wNormal = normalize(normalMatrix * normalize(normal));
 	vec3 wTangent = normalize(normalMatrix * normalize(tangent.xyz));
 
-	OUT.normal = normalize(normalMatrix * normalize(normal));
+	OUT.normal = wNormal;
 	OUT.tangent = wTangent;
 	OUT.binormal = cross(wTangent, wNormal) * tangent.w;
 
@@ -37,4 +41,8 @@ void main(void){
 	OUT.worldPos = worldPos.xyz;
 
 	gl_Position = (projMatrix * viewMatrix) * worldPos;
+
+	vec3 viewDir = normalize(lightPos - worldPos.xyz);
+	vec4 pushVal = vec4(OUT.normal, 0) * dot(viewDir, OUT.normal);
+	OUT.shadowProj = shadowMatrix * (worldPos + pushVal);
 }
