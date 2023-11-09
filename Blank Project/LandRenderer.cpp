@@ -1,25 +1,26 @@
-#include "Renderer.h"
-#include "../nclgl/Camera.h"
-#include "../nclgl/SceneNode.h"
+#include "LandRenderer.h"
 #include "../nclgl/Light.h"
+#include "../nclgl/HeightMap.h"
+#include "../nclgl/SceneNode.h"
+#include "../nclgl/Camera.h"
 #include <algorithm>
 
 #define SHADOWSIZE 2048
 
-Renderer::Renderer(Window &parent) : OGLRenderer(parent)	{
+LandRenderer::LandRenderer(Window& parent) : OGLRenderer(parent) {
 	quad = Mesh::GenerateQuad();
-	sphere = Mesh::LoadFromMeshFile("Sphere.msh");
-	asteroid = Mesh::LoadFromMeshFile("Cube.msh");
 
 	init = LoadShaders();
 
-	camera = new Camera(-45.0f, 0.0f, Vector3(0, 30, 175));
+	Vector3 heightmapSize = heightMap->GetHeightmapSize();
 
-	light = new Light(Vector3(100.0f, 100.0f, 100.0f), Vector4(1, 1, 1, 1), 10000.0f);
+	camera = new Camera(-45.0f, 0.0f, heightmapSize * Vector3(0.5f, 5.0f, 0.5f));
+
+	light = new Light(heightmapSize * Vector3(0.5f, 1.5f, 0.5f), Vector4(1, 1, 1, 1), heightmapSize.x);
 
 	root = new SceneNode();
 
-	SetNodes();
+	//SetNodes();
 
 	projMatrix = Matrix4::Perspective(1.0f, 10000.0f, (float)width / (float)height, 45.0f);
 
@@ -27,71 +28,63 @@ Renderer::Renderer(Window &parent) : OGLRenderer(parent)	{
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
-
-	camera->AddNode(Vector3(0, 30, 175));
-	camera->AddNode(Vector3(1000, 30, 175));
-	camera->AddNode(Vector3(500, 60, 500));
 }
 
-Renderer::~Renderer(void)	{
+LandRenderer::~LandRenderer() {
 	glDeleteTextures(1, &shadowTex);
 	glDeleteFramebuffers(1, &shadowFBO);
 	delete quad;
+	delete heightMap;
 	delete skyboxShader;
 	delete sceneShader;
-	delete shadowShader;
 	delete root;
 	delete camera;
 	delete light;
 }
 
-void Renderer::UpdateScene(float dt) {
+void LandRenderer::UpdateScene(float dt) {
 	camera->UpdateCamera(dt);
 	viewMatrix = camera->BuildViewMatrix();
 	frameFrustum.FromMatrix(projMatrix * viewMatrix);
 
-	planetCore->SetTransform(planetCore->GetTransform() * Matrix4::Rotation(-30.0f * dt, Vector3(0, 1, 0)));
-
 	root->Update(dt);
 }
 
-void Renderer::RenderScene()	{
+void LandRenderer::RenderScene() {
 	BuildNodeLists(root);
 	SortNodeLists();
-
-	std::cout << camera->GetPosition() << "\n";
 
 	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
 	DrawSkybox();
-	DrawShadowScene();
-	DrawNodes();
+	DrawHeightMap();
+	//DrawNodes();
+	ClearNodeLists();
 }
 
-void Renderer::SwitchToScene() {
+void LandRenderer::SwitchToScene() {
 	init = LoadShaders();
 }
 
-bool Renderer::LoadShaders()
+bool LandRenderer::LoadShaders()
 {
-	planetTexture = SOIL_load_OGL_texture(TEXTUREDIR"planet.JPG", SOIL_LOAD_AUTO, 1, SOIL_FLAG_MIPMAPS);
-	planetBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"planetDOT3.JPG", SOIL_LOAD_AUTO, 2, SOIL_FLAG_MIPMAPS);
+	heightMap = new HeightMap(TEXTUREDIR"noise.png");
 
-	asteroidTexture = SOIL_load_OGL_texture(TEXTUREDIR"Barren Reds.JPG", SOIL_LOAD_AUTO, 3, SOIL_FLAG_MIPMAPS);
-	asteroidBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"Barren RedsDOT3.JPG", SOIL_LOAD_AUTO, 4, SOIL_FLAG_MIPMAPS);
+	surfaceTexture = SOIL_load_OGL_texture(TEXTUREDIR"Barren Reds.JPG", SOIL_LOAD_AUTO, 1, SOIL_FLAG_MIPMAPS);
+	surfaceBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"Barren RedsDOT3.JPG", SOIL_LOAD_AUTO, 2, SOIL_FLAG_MIPMAPS);
 
 	cubeMap = SOIL_load_OGL_cubemap(
-		TEXTUREDIR"SkyBlue_right.png", TEXTUREDIR"SkyBlue_left.png",
-		TEXTUREDIR"SkyBlue_top.png", TEXTUREDIR"SkyBlue_bottom.png",
-		TEXTUREDIR"SkyBlue_front.png", TEXTUREDIR"SkyBlue_back.png", SOIL_LOAD_RGB, 5, 0);
+		TEXTUREDIR"rusted_west.jpg", TEXTUREDIR"rusted_east.jpg",
+		TEXTUREDIR"rusted_up.jpg", TEXTUREDIR"rusted_down.jpg",
+		TEXTUREDIR"rusted_south.jpg", TEXTUREDIR"rusted_north.jpg", SOIL_LOAD_RGB, 3, 0);
 
-	if (!cubeMap || !planetTexture || !planetBumpMap || !asteroidTexture || !asteroidBumpMap) return false;
+	if (!cubeMap || !surfaceTexture || !surfaceBumpMap) return false;
 
 	skyboxShader = new Shader("SkyboxVertex.glsl", "SkyboxFragment.glsl");
 	sceneShader = new Shader("PerPixelSceneVertex.glsl", "PerPixelSceneFragment.glsl");
-	shadowShader = new Shader("ShadowVert.glsl", "ShadowFrag.glsl");
+	landShader = new Shader("PerPixelVertex.glsl", "PerPixelFragment.glsl");
 
-	if (!skyboxShader->LoadSuccess() || !sceneShader->LoadSuccess() || !shadowShader->LoadSuccess()) return false;
+	if (!skyboxShader->LoadSuccess() || !sceneShader->LoadSuccess() || !landShader->LoadSuccess()) return false;
 
 	glGenTextures(1, &shadowTex);
 	glBindTexture(GL_TEXTURE_2D, shadowTex);
@@ -109,35 +102,13 @@ bool Renderer::LoadShaders()
 	glDrawBuffer(GL_NONE);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-	SetTextureMirrorRepeating(planetTexture, true);
-	SetTextureMirrorRepeating(planetBumpMap, true);
-	SetTextureRepeating(asteroidTexture, true);
-	SetTextureRepeating(asteroidBumpMap, true);
+	SetTextureRepeating(surfaceTexture, true);
+	SetTextureRepeating(surfaceBumpMap, true);
 
 	return true;
 }
 
-void Renderer::DrawShadowScene() {
-	glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
-
-	glViewport(0, 0, SHADOWSIZE, SHADOWSIZE);
-	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-
-	BindShader(shadowShader);
-
-	viewMatrix = Matrix4::BuildViewMatrix(light->GetPosition(), Vector3(0, 0, 0));
-	projMatrix = Matrix4::Perspective(1, 100, 1, 45);
-	shadowMatrix = projMatrix * viewMatrix;
-
-	DrawShadowNodes();
-
-	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-	glViewport(0, 0, width, height);
-
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
-void Renderer::DrawSkybox() {
+void LandRenderer::DrawSkybox() {
 	glDepthMask(GL_FALSE);
 
 	BindShader(skyboxShader);
@@ -147,37 +118,31 @@ void Renderer::DrawSkybox() {
 	glDepthMask(GL_TRUE);
 }
 
-void Renderer::SetNodes() {
-	SceneNode* p = new SceneNode();
-	p->SetColour(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
-	p->SetTransform(Matrix4::Translation(Vector3(0, -2000.0f, -2000.0f)));
-	p->SetModelScale(Vector3(1000.0f, 1000.0f, 1000.0f));
-	p->SetBoundingRadius(1000.0f);
-	p->SetMesh(sphere);
-	p->SetTexture(planetTexture);
-	p->SetBumpMap(planetBumpMap);
-	root->AddChild(p);
+void LandRenderer::DrawHeightMap() {
+	BindShader(landShader);
+	SetShaderLight(*light);
+	glUniform3fv(glGetUniformLocation(landShader->GetProgram(), "cameraPos"), 1, (float*)&camera->GetPosition());
 
-	SceneNode* core = new SceneNode();
-	p->AddChild(core);
-	planetCore = core;
+	glUniform1i(glGetUniformLocation(landShader->GetProgram(), "diffuseTex"), 0);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, surfaceTexture);
 
-	double pi = 2 * acos(0.0);
-	for (int i = 0; i < 8; i++) {
-		SceneNode* a = new SceneNode();
-		a->SetColour(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
-		float angle = i * 2 * pi / 8;
-		a->SetTransform(Matrix4::Translation(Vector3(1300.0f * cos(angle), 0, 1300.0f * sin(angle))));
-		a->SetModelScale(Vector3(100.0f, 100.0f, 100.0f));
-		a->SetBoundingRadius(50.0f);
-		a->SetMesh(asteroid);
-		a->SetTexture(asteroidTexture);
-		a->SetBumpMap(asteroidBumpMap);
-		core->AddChild(a);
-	}
+	glUniform1i(glGetUniformLocation(landShader->GetProgram(), "bumpTex"), 1);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, surfaceBumpMap);
+
+	modelMatrix.ToIdentity();
+	textureMatrix.ToIdentity();
+
+	UpdateShaderMatrices();
+	heightMap->Draw();
 }
 
-void Renderer::BuildNodeLists(SceneNode* from) {
+void LandRenderer::SetNodes() {
+
+}
+
+void LandRenderer::BuildNodeLists(SceneNode* from) {
 	if (frameFrustum.InsideFrustum(*from)) {
 		Vector3 dir = from->GetWorldTransform().GetPositionVector() - camera->GetPosition();
 		from->SetCameraDistance(Vector3::Dot(dir, dir));
@@ -189,22 +154,22 @@ void Renderer::BuildNodeLists(SceneNode* from) {
 	for (vector<SceneNode*>::const_iterator i = from->GetChildIteratorStart(); i != from->GetChildIteratorEnd(); i++) BuildNodeLists(*i);
 }
 
-void Renderer::SortNodeLists() {
+void LandRenderer::SortNodeLists() {
 	std::sort(transparentNodeList.rbegin(), transparentNodeList.rend(), SceneNode::CompareByCameraDistance);
 	std::sort(nodeList.begin(), nodeList.end(), SceneNode::CompareByCameraDistance);
 }
 
-void Renderer::ClearNodeLists() {
+void LandRenderer::ClearNodeLists() {
 	transparentNodeList.clear();
 	nodeList.clear();
 }
 
-void Renderer::DrawShadowNodes() {
+void LandRenderer::DrawShadowNodes() {
 	for (const auto& i : nodeList) i->Draw(*this);
 	for (const auto& i : transparentNodeList) i->Draw(*this);
 }
 
-void Renderer::DrawNodes() {
+void LandRenderer::DrawNodes() {
 	BindShader(sceneShader);
 	viewMatrix = camera->BuildViewMatrix();
 	projMatrix = Matrix4::Perspective(1.0f, 15000.0f, (float)width / (float)height, 45.0f);
@@ -226,7 +191,7 @@ void Renderer::DrawNodes() {
 	ClearNodeLists();
 }
 
-void Renderer::DrawNode(SceneNode* n) {
+void LandRenderer::DrawNode(SceneNode* n) {
 	if (n->GetMesh()) {
 		Matrix4 model = n->GetWorldTransform() * Matrix4::Scale(n->GetModelScale());
 

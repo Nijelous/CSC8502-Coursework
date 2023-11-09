@@ -1,26 +1,26 @@
 #pragma once
-#include "../NCLGL/OGLRenderer.h"
+#include "../nclgl/OGLRenderer.h"
 #include "../nclgl/Frustum.h"
 
 class Camera;
 class SceneNode;
 class Light;
+class HeightMap;
 
-class Renderer : public OGLRenderer	{
+class LandRenderer : public OGLRenderer
+{
 public:
-	Renderer(Window &parent);
-	 ~Renderer(void);
-	 void RenderScene()				override;
-	 void UpdateScene(float dt)	override;
-	 void SwitchToScene() override;
+	LandRenderer(Window& parent);
+	~LandRenderer();
+	void RenderScene() override;
+	void UpdateScene(float dt) override;
+	void SwitchToScene() override;
 
 protected:
 	bool LoadShaders();
 
-	void DrawShadowScene();
-	void DrawMainScene();
-
 	void DrawSkybox();
+	void DrawHeightMap();
 
 	void SetNodes();
 	void BuildNodeLists(SceneNode* from);
@@ -31,29 +31,27 @@ protected:
 	void DrawNode(SceneNode* n);
 
 	Mesh* quad;
-	Mesh* sphere;
-	Mesh* asteroid;
+	HeightMap* heightMap;
 
 	Shader* skyboxShader;
 	Shader* sceneShader;
-	Shader* shadowShader;
+	Shader* landShader;
 
 	SceneNode* root;
-	SceneNode* planetCore;
 	Camera* camera;
 	Light* light;
 
 	GLuint shadowTex;
 	GLuint shadowFBO;
 
-	GLuint planetTexture;
-	GLuint planetBumpMap;
-	GLuint asteroidTexture;
-	GLuint asteroidBumpMap;
+	GLuint surfaceTexture;
+	GLuint surfaceBumpMap;
 	GLuint cubeMap;
 
 	Frustum frameFrustum;
 
 	vector<SceneNode*> transparentNodeList;
 	vector<SceneNode*> nodeList;
+
 };
+

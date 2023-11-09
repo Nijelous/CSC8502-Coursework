@@ -24,24 +24,43 @@ void Camera::UpdateCamera(float dt)
 
 	float timeSpeed = speed * dt;
 
-	if (Window::GetKeyboard()->KeyDown(KEYBOARD_W)) {
-		position += forward * timeSpeed;
-	}
-	if (Window::GetKeyboard()->KeyDown(KEYBOARD_S)) {
-		position -= forward * timeSpeed;
-	}
-	if (Window::GetKeyboard()->KeyDown(KEYBOARD_A)) {
-		position -= right * timeSpeed;
-	}
-	if (Window::GetKeyboard()->KeyDown(KEYBOARD_D)) {
-		position += right * timeSpeed;
-	}
+	if (freeCam) {
+		if (Window::GetKeyboard()->KeyDown(KEYBOARD_W)) {
+			position += forward * timeSpeed;
+		}
+		if (Window::GetKeyboard()->KeyDown(KEYBOARD_S)) {
+			position -= forward * timeSpeed;
+		}
+		if (Window::GetKeyboard()->KeyDown(KEYBOARD_A)) {
+			position -= right * timeSpeed;
+		}
+		if (Window::GetKeyboard()->KeyDown(KEYBOARD_D)) {
+			position += right * timeSpeed;
+		}
 
-	if (Window::GetKeyboard()->KeyDown(KEYBOARD_SHIFT)) {
-		position.y += timeSpeed;
+		if (Window::GetKeyboard()->KeyDown(KEYBOARD_SHIFT)) {
+			position.y += timeSpeed;
+		}
+		if (Window::GetKeyboard()->KeyDown(KEYBOARD_SPACE)) {
+			position.y -= timeSpeed;
+		}
+		if (Window::GetKeyboard()->KeyTriggered(KEYBOARD_C)) {
+			freeCam = false;
+			position = savedPosition;
+		}
 	}
-	if (Window::GetKeyboard()->KeyDown(KEYBOARD_SPACE)) {
-		position.y -= timeSpeed;
+	else {
+		position += (positionList[1] - positionList[0]) / (100.0f);
+		count++;
+		if (count == 100) {
+			positionList.push_back(positionList[0]);
+			positionList.erase(positionList.begin());
+			count = 0;
+		}
+		if (Window::GetKeyboard()->KeyTriggered(KEYBOARD_C)) {
+			freeCam = true;
+			savedPosition = position;
+		}
 	}
 }
 

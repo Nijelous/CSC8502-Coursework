@@ -1,6 +1,7 @@
 #pragma once
 #include "../nclgl/Vector3.h"
 #include "../nclgl/Matrix4.h"
+#include <vector>
 
 class Camera
 {
@@ -35,10 +36,16 @@ public:
 
 	void SetSpeed(float s) { speed = s; }
 
+	void AddNode(Vector3 val) { if(positionList.empty()) savedPosition = val; positionList.push_back(val); }
+
 protected:
+	bool freeCam = true;
 	float yaw;
 	float pitch;
 	float speed;
 	Vector3 position;
+	Vector3 savedPosition;
+	int count = 0;
+	std::vector<Vector3> positionList;
 };
 
