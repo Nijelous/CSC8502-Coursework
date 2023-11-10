@@ -9,7 +9,7 @@
 Renderer::Renderer(Window &parent) : OGLRenderer(parent)	{
 	quad = Mesh::GenerateQuad();
 	sphere = Mesh::LoadFromMeshFile("Sphere.msh");
-	asteroid = Mesh::LoadFromMeshFile("Cube.msh");
+	asteroid = Mesh::LoadFromMeshFile("Rock.msh");
 
 	init = LoadShaders();
 
@@ -58,6 +58,11 @@ void Renderer::UpdateScene(float dt) {
 
 	planetCore->SetTransform(planetCore->GetTransform() * Matrix4::Rotation(-30.0f * dt, Vector3(0, 1, 0)));
 
+	for (vector<SceneNode*>::const_iterator i = planetCore->GetChildIteratorStart(); i != planetCore->GetChildIteratorEnd(); i++) {
+		float random = static_cast<float>(rand()) / static_cast<float>(RAND_MAX/50);
+		(*i)->SetTransform((*i)->GetTransform() * Matrix4::Rotation(random * dt, Vector3(1, 1, 1)));
+	}
+
 	root->Update(dt);
 }
 
@@ -65,7 +70,7 @@ void Renderer::RenderScene()	{
 	BuildNodeLists(root);
 	SortNodeLists();
 
-	std::cout << camera->GetPosition() << "\n";
+	//std::cout << camera->GetPosition() << "\n";
 
 	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
@@ -166,6 +171,11 @@ void Renderer::DrawSkybox() {
 	glDepthMask(GL_FALSE);
 
 	BindShader(skyboxShader);
+
+	glUniform1i(glGetUniformLocation(skyboxShader->GetProgram(), "cubeTex"), 1);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMap);
+
 	UpdateShaderMatrices();
 
 	quad->Draw();
@@ -193,8 +203,8 @@ void Renderer::SetNodes() {
 		a->SetColour(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
 		float angle = i * 2 * pi / 8;
 		a->SetTransform(Matrix4::Translation(Vector3(1300.0f * cos(angle), 0, 1300.0f * sin(angle))));
-		a->SetModelScale(Vector3(100.0f, 100.0f, 100.0f));
-		a->SetBoundingRadius(50.0f);
+		a->SetModelScale(Vector3(200.0f, 200.0f, 200.0f));
+		a->SetBoundingRadius(200.0f);
 		a->SetMesh(asteroid);
 		a->SetTexture(asteroidTexture);
 		a->SetBumpMap(asteroidBumpMap);

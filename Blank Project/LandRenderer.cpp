@@ -65,7 +65,7 @@ void LandRenderer::RenderScene() {
 	BuildNodeLists(root);
 	SortNodeLists();
 
-	std::cout << camera->GetPosition() << "\n";
+	//std::cout << camera->GetPosition() << "\n";
 
 	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
@@ -99,9 +99,9 @@ bool LandRenderer::LoadShaders()
 	surfaceBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"Barren RedsDOT3.JPG", SOIL_LOAD_AUTO, 2, SOIL_FLAG_MIPMAPS);
 
 	cubeMap = SOIL_load_OGL_cubemap(
-		TEXTUREDIR"GreenSky_left.png", TEXTUREDIR"GreenSky_right.png",
-		TEXTUREDIR"GreenSky_up.png", TEXTUREDIR"GreenSky_down.png",
-		TEXTUREDIR"GreenSky_front.png", TEXTUREDIR"GreenSky_back.png", SOIL_LOAD_RGB, 3, 0);
+		TEXTUREDIR"GreenSky_right.jpg", TEXTUREDIR"GreenSky_left.jpg",
+		TEXTUREDIR"GreenSky_up.jpg", TEXTUREDIR"GreenSky_down.jpg",
+		TEXTUREDIR"GreenSky_front.jpg", TEXTUREDIR"GreenSky_back.jpg", SOIL_LOAD_RGB, 3, 0);
 
 	if (!cubeMap || !surfaceTexture || !surfaceBumpMap) return false;
 
@@ -137,6 +137,11 @@ void LandRenderer::DrawSkybox() {
 	glDepthMask(GL_FALSE);
 
 	BindShader(skyboxShader);
+
+	glUniform1i(glGetUniformLocation(skyboxShader->GetProgram(), "cubeTex"), 1);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMap);
+
 	UpdateShaderMatrices();
 
 	quad->Draw();
