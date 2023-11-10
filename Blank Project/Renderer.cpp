@@ -29,8 +29,14 @@ Renderer::Renderer(Window &parent) : OGLRenderer(parent)	{
 	glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
 
 	camera->AddNode(Vector3(0, 30, 175));
-	camera->AddNode(Vector3(1000, 30, 175));
-	camera->AddNode(Vector3(500, 60, 500));
+	camera->AddNode(Vector3(-1500, 30, -700));
+	camera->AddNode(Vector3(-2100, -1360, -2480));
+	camera->AddNode(Vector3(-690, -2620, -4260));
+	camera->AddNode(Vector3(1790, -690, -3800));
+	camera->AddNode(Vector3(2300, -650, -1400));
+	camera->AddNode(Vector3(0, 30, 175));
+	camera->AddNode(Vector3(0, 30, 175));
+	camera->AddNode(boundingCentre);
 }
 
 Renderer::~Renderer(void)	{
@@ -72,13 +78,32 @@ void Renderer::SwitchToScene() {
 	init = LoadShaders();
 }
 
+bool Renderer::InTransitionBounds()
+{
+	Vector3 pos = camera->GetPosition();
+	int x = pow((pos.x - boundingCentre.x), 2);
+	int y = pow((pos.y - boundingCentre.y), 2);
+	int z = pow((pos.z - boundingCentre.z), 2);
+
+	if (x + y + z == boundingRadius * boundingRadius || x + y + z < boundingRadius * boundingRadius) return true;
+
+	else return false;
+}
+
+void Renderer::SwitchFromScene()
+{
+	if (InTransitionBounds()) {
+		camera->SetPosition(camera->GetNextNode());
+	}
+}
+
 bool Renderer::LoadShaders()
 {
 	planetTexture = SOIL_load_OGL_texture(TEXTUREDIR"planet.JPG", SOIL_LOAD_AUTO, 1, SOIL_FLAG_MIPMAPS);
 	planetBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"planetDOT3.JPG", SOIL_LOAD_AUTO, 2, SOIL_FLAG_MIPMAPS);
 
-	asteroidTexture = SOIL_load_OGL_texture(TEXTUREDIR"Barren Reds.JPG", SOIL_LOAD_AUTO, 3, SOIL_FLAG_MIPMAPS);
-	asteroidBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"Barren RedsDOT3.JPG", SOIL_LOAD_AUTO, 4, SOIL_FLAG_MIPMAPS);
+	asteroidTexture = SOIL_load_OGL_texture(TEXTUREDIR"Rock.png", SOIL_LOAD_AUTO, 3, SOIL_FLAG_MIPMAPS);
+	asteroidBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"RockDOT3.JPG", SOIL_LOAD_AUTO, 4, SOIL_FLAG_MIPMAPS);
 
 	cubeMap = SOIL_load_OGL_cubemap(
 		TEXTUREDIR"SkyBlue_right.png", TEXTUREDIR"SkyBlue_left.png",
@@ -175,6 +200,8 @@ void Renderer::SetNodes() {
 		a->SetBumpMap(asteroidBumpMap);
 		core->AddChild(a);
 	}
+	boundingCentre = Vector3(0, -2000.0f, -2000.0f);
+	boundingRadius = 1500.0f;
 }
 
 void Renderer::BuildNodeLists(SceneNode* from) {

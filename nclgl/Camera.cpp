@@ -50,9 +50,9 @@ void Camera::UpdateCamera(float dt)
 		}
 	}
 	else {
-		position += (positionList[1] - positionList[0]) / (100.0f);
+		position += (positionList[1] - positionList[0]) / (400.0f);
 		count++;
-		if (count == 100) {
+		if (count == 400) {
 			positionList.push_back(positionList[0]);
 			positionList.erase(positionList.begin());
 			count = 0;

@@ -15,6 +15,8 @@ public:
 	void RenderScene() override;
 	void UpdateScene(float dt) override;
 	void SwitchToScene() override;
+	bool InTransitionBounds();
+	void SwitchFromScene();
 
 protected:
 	bool LoadShaders();
@@ -47,6 +49,8 @@ protected:
 	GLuint surfaceTexture;
 	GLuint surfaceBumpMap;
 	GLuint cubeMap;
+
+	float yMax;
 
 	Frustum frameFrustum;
 

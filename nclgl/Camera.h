@@ -37,9 +37,18 @@ public:
 	void SetSpeed(float s) { speed = s; }
 
 	void AddNode(Vector3 val) { if(positionList.empty()) savedPosition = val; positionList.push_back(val); }
+	Vector3 GetNextNode() {
+		positionList.push_back(positionList[0]);
+		positionList.erase(positionList.begin());
+		positionList.push_back(positionList[0]);
+		positionList.erase(positionList.begin());
+		count = 0;
+		savedPosition = positionList[0];
+		return positionList[0]; 
+	}
 
 protected:
-	bool freeCam = true;
+	bool freeCam = false;
 	float yaw;
 	float pitch;
 	float speed;

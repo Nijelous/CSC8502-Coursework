@@ -32,11 +32,21 @@ int main()	{
 		if (Window::GetKeyboard()->KeyDown(KEYBOARD_F5)) {
 			Shader::ReloadAllShaders();
 		}
-		if (Window::GetKeyboard()->KeyTriggered(KEYBOARD_TAB)) {
-			planet = !planet;
-			if (!planet) landRenderer.SwitchToScene();
-			else planetRenderer.SwitchToScene();
-			if (!landRenderer.HasInitialised() || !planetRenderer.HasInitialised()) return -1;
+		if (planet) {
+			if (planetRenderer.InTransitionBounds()) {
+				planet = false;
+				planetRenderer.SwitchFromScene();
+				landRenderer.SwitchToScene();
+				if (!landRenderer.HasInitialised()) return -1;
+			}
+		}
+		if (!planet) {
+			if (landRenderer.InTransitionBounds()) {
+				planet = true;
+				landRenderer.SwitchFromScene();
+				planetRenderer.SwitchToScene();
+				if (!planetRenderer.HasInitialised()) return -1;
+			}
 		}
 	}
 	return 0;

@@ -14,6 +14,8 @@ LandRenderer::LandRenderer(Window& parent) : OGLRenderer(parent) {
 
 	Vector3 heightmapSize = heightMap->GetHeightmapSize();
 
+	yMax = 2500.0f;
+
 	camera = new Camera(-45.0f, 0.0f, heightmapSize * Vector3(0.5f, 5.0f, 0.5f));
 
 	light = new Light(heightmapSize * Vector3(0.5f, 1.5f, 0.5f), Vector4(1, 1, 1, 1), heightmapSize.x);
@@ -28,6 +30,15 @@ LandRenderer::LandRenderer(Window& parent) : OGLRenderer(parent) {
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+
+	camera->AddNode(camera->GetPosition());
+	camera->AddNode(Vector3(2000, 1250, 2000));
+	camera->AddNode(Vector3(2000, 580, 2000));
+	camera->AddNode(Vector3(1000, 580, 920));
+	camera->AddNode(Vector3(2320, 580, 1030));
+	camera->AddNode(Vector3(2820, 280, 2600));
+	camera->AddNode(Vector3(2820, 280, 2600));
+	camera->AddNode(Vector3(2000, 3000, 2000));
 }
 
 LandRenderer::~LandRenderer() {
@@ -54,6 +65,8 @@ void LandRenderer::RenderScene() {
 	BuildNodeLists(root);
 	SortNodeLists();
 
+	std::cout << camera->GetPosition() << "\n";
+
 	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
 	DrawSkybox();
@@ -66,6 +79,18 @@ void LandRenderer::SwitchToScene() {
 	init = LoadShaders();
 }
 
+bool LandRenderer::InTransitionBounds()
+{
+	return(camera->GetPosition().y > yMax);
+}
+
+void LandRenderer::SwitchFromScene()
+{
+	if (InTransitionBounds()) {
+		camera->SetPosition(camera->GetNextNode());
+	}
+}
+
 bool LandRenderer::LoadShaders()
 {
 	heightMap = new HeightMap(TEXTUREDIR"noise.png");
@@ -74,9 +99,9 @@ bool LandRenderer::LoadShaders()
 	surfaceBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"Barren RedsDOT3.JPG", SOIL_LOAD_AUTO, 2, SOIL_FLAG_MIPMAPS);
 
 	cubeMap = SOIL_load_OGL_cubemap(
-		TEXTUREDIR"rusted_west.jpg", TEXTUREDIR"rusted_east.jpg",
-		TEXTUREDIR"rusted_up.jpg", TEXTUREDIR"rusted_down.jpg",
-		TEXTUREDIR"rusted_south.jpg", TEXTUREDIR"rusted_north.jpg", SOIL_LOAD_RGB, 3, 0);
+		TEXTUREDIR"GreenSky_left.png", TEXTUREDIR"GreenSky_right.png",
+		TEXTUREDIR"GreenSky_up.png", TEXTUREDIR"GreenSky_down.png",
+		TEXTUREDIR"GreenSky_front.png", TEXTUREDIR"GreenSky_back.png", SOIL_LOAD_RGB, 3, 0);
 
 	if (!cubeMap || !surfaceTexture || !surfaceBumpMap) return false;
 

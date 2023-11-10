@@ -13,7 +13,8 @@ public:
 	 void RenderScene()				override;
 	 void UpdateScene(float dt)	override;
 	 void SwitchToScene() override;
-
+	 bool InTransitionBounds();
+	 void SwitchFromScene();
 protected:
 	bool LoadShaders();
 
@@ -51,6 +52,9 @@ protected:
 	GLuint asteroidTexture;
 	GLuint asteroidBumpMap;
 	GLuint cubeMap;
+
+	Vector3 boundingCentre;
+	float boundingRadius;
 
 	Frustum frameFrustum;
 
