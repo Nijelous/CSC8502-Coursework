@@ -61,8 +61,6 @@ public:
 
 	static Mesh* LoadFromMeshFile(const std::string& name);
 
-	void RandomTestStuff();
-
 	unsigned int GetTriCount() const {
 		int primCount = indices ? numIndices : numVertices;
 		return primCount / 3;

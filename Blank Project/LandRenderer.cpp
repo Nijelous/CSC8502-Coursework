@@ -16,7 +16,7 @@ LandRenderer::LandRenderer(Window& parent) : OGLRenderer(parent) {
 
 	yMax = 2500.0f;
 
-	camera = new Camera(-45.0f, 0.0f, heightmapSize * Vector3(0.5f, 5.0f, 0.5f));
+	camera = new Camera(-45.0f, 0.0f, heightmapSize * Vector3(0.5f, 0.0f, 0.5f) + Vector3(0.0f, 2400.0f, 0.0f));
 
 	light = new Light(heightmapSize * Vector3(0.5f, 1.5f, 0.5f), Vector4(1, 1, 1, 1), 10000);
 
@@ -34,7 +34,7 @@ LandRenderer::LandRenderer(Window& parent) : OGLRenderer(parent) {
 	waterRotate = 0.0f;
 	waterCycle = 0.0f;
 
-	camera->AddNode(heightmapSize * Vector3(0.5f, 5.0f, 0.5f));
+	camera->AddNode(heightmapSize * Vector3(0.5f, 0.0f, 0.5f) + Vector3(0.0f, 2400.0f, 0.0f));
 	camera->AddNode(heightmapSize * Vector3(0.5f, 1.0f, 0.5f));
 	camera->AddNode(heightmapSize * Vector3(0.9f, 1.0f, 0.9f));
 	camera->AddNode(heightmapSize * Vector3(0.9f, 1.0f, 0.1f));
@@ -46,12 +46,7 @@ LandRenderer::LandRenderer(Window& parent) : OGLRenderer(parent) {
 
 LandRenderer::~LandRenderer() {
 	if (active) {
-		glDeleteTextures(1, &shadowTex);
-		glDeleteFramebuffers(1, &shadowFBO);
-		delete skyboxShader;
-		delete sceneShader;
-		delete landShader;
-		delete waterShader;
+		DeleteShaders();
 	}
 	delete heightMap;
 	delete quad;
@@ -63,6 +58,7 @@ LandRenderer::~LandRenderer() {
 void LandRenderer::UpdateScene(float dt) {
 	camera->UpdateCamera(dt);
 	viewMatrix = camera->BuildViewMatrix();
+	projMatrix = Matrix4::Perspective(1.0f, 15000.0f, (float)width / (float)height, 45.0f);
 	frameFrustum.FromMatrix(projMatrix * viewMatrix);
 
 	root->Update(dt);
@@ -75,16 +71,80 @@ void LandRenderer::RenderScene() {
 	BuildNodeLists(root);
 	SortNodeLists();
 
-	//std::cout << camera->GetPosition() << "\n";
-
-	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+	glBindFramebuffer(GL_FRAMEBUFFER, bufferFBO);
+	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
 	DrawSkybox();
 	DrawHeightMap();
 	DrawWater();
 	DrawNodes();
+
+	glBindFramebuffer(GL_FRAMEBUFFER, postProcessFBO);
+	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+	glDisable(GL_DEPTH_TEST);
+
+	modelMatrix.ToIdentity();
+	viewMatrix.ToIdentity();
+	projMatrix.ToIdentity();
+	UpdateShaderMatrices();
+
+	DrawWaterBlur();
+	DrawFog();
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	PresentScene();
+
+	glEnable(GL_DEPTH_TEST);
+
 	ClearNodeLists();
 }
+
+void LandRenderer::DrawFog() {
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bufferColourTex[1], 0);
+	BindShader(fogShader);
+	UpdateShaderMatrices();
+	glUniform1i(glGetUniformLocation(fogShader->GetProgram(), "sceneTex"), 0);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, bufferColourTex[0]);
+	float distance = yMax - camera->GetPosition().y;
+	glUniform1f(glGetUniformLocation(fogShader->GetProgram(), "visibility"), distance > 500.0f ? 1 : distance / 500);
+	glUniform3fv(glGetUniformLocation(fogShader->GetProgram(), "fogColour"), 1, (float*)&Vector3(0.286f, 0.407f, 0));
+	quad->Draw();
+}
+
+void LandRenderer::DrawWaterBlur() {
+	if (camera->GetPosition().y < 92.5f && camera->GetPosition().y > heightMap->GetHeightAt(camera->GetPosition().x, camera->GetPosition().z)) {
+		BindShader(waterBlurShader);
+		UpdateShaderMatrices();
+		glUniform3fv(glGetUniformLocation(waterBlurShader->GetProgram(), "waterColour"), 1, (float*)&Vector3(0.509f, 1.0f, 0.518f));
+		glActiveTexture(GL_TEXTURE0);
+		glUniform1i(glGetUniformLocation(waterBlurShader->GetProgram(), "sceneTex"), 0);
+		for (int i = 0; i < 4; i++) {
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bufferColourTex[1], 0);
+			glUniform1i(glGetUniformLocation(waterBlurShader->GetProgram(), "isVertical"), 0);
+
+			glBindTexture(GL_TEXTURE_2D, bufferColourTex[0]);
+			quad->Draw();
+
+			glUniform1i(glGetUniformLocation(waterBlurShader->GetProgram(), "isVertical"), 1);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bufferColourTex[0], 0);
+			glBindTexture(GL_TEXTURE_2D, bufferColourTex[1]);
+			quad->Draw();
+		}
+	}
+}
+
+void LandRenderer::PresentScene() {
+	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+	BindShader(presentShader);
+	UpdateShaderMatrices();
+	glUniform1i(glGetUniformLocation(presentShader->GetProgram(), "diffuseTex"), 0);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, bufferColourTex[1]);
+	quad->Draw();
+}
+
 
 void LandRenderer::SwitchToScene() {
 	init = LoadShaders();
@@ -101,13 +161,24 @@ void LandRenderer::SwitchFromScene()
 	if (InTransitionBounds()) {
 		camera->SetPosition(camera->GetNextNode());
 	}
+	DeleteShaders();
+	active = false;
+}
+
+void LandRenderer::DeleteShaders() {
 	glDeleteTextures(1, &shadowTex);
 	glDeleteFramebuffers(1, &shadowFBO);
+	glDeleteTextures(1, &bufferDepthTex);
+	glDeleteTextures(3, bufferColourTex);
+	glDeleteFramebuffers(1, &bufferFBO);
+	glDeleteFramebuffers(1, &postProcessFBO);
 	delete skyboxShader;
 	delete sceneShader;
 	delete landShader;
 	delete waterShader;
-	active = false;
+	delete fogShader;
+	delete waterBlurShader;
+	delete presentShader;
 }
 
 bool LandRenderer::LoadShaders()
@@ -130,8 +201,12 @@ bool LandRenderer::LoadShaders()
 	sceneShader = new Shader("PerPixelSceneVertex.glsl", "PerPixelSceneFragment.glsl");
 	landShader = new Shader("PerPixelVertex.glsl", "PerPixelFragment.glsl");
 	waterShader = new Shader("ReflectVertex.glsl", "ReflectFragment.glsl");
+	fogShader = new Shader("FogVertex.glsl", "FogFragment.glsl");
+	waterBlurShader = new Shader("WaterBlurVert.glsl", "WaterBlurFrag.glsl");
+	presentShader = new Shader("TexturedVertex.glsl", "TexturedFragment.glsl");
 
-	if (!skyboxShader->LoadSuccess() || !sceneShader->LoadSuccess() || !landShader->LoadSuccess() || !waterShader->LoadSuccess()) return false;
+	if (!skyboxShader->LoadSuccess() || !sceneShader->LoadSuccess() || !landShader->LoadSuccess() || !waterShader->LoadSuccess()
+		|| !fogShader->LoadSuccess() || !waterBlurShader->LoadSuccess() || !presentShader->LoadSuccess()) return false;
 
 	glGenTextures(1, &shadowTex);
 	glBindTexture(GL_TEXTURE_2D, shadowTex);
@@ -147,6 +222,42 @@ bool LandRenderer::LoadShaders()
 	glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTex, 0);
 	glDrawBuffer(GL_NONE);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	glGenFramebuffers(1, &shadowFBO);
+	glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTex, 0);
+	glDrawBuffer(GL_NONE);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	glGenTextures(1, &bufferDepthTex);
+	glBindTexture(GL_TEXTURE_2D, bufferDepthTex);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, width, height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
+
+	for (int i = 0; i < 2; i++) {
+		glGenTextures(1, &bufferColourTex[i]);
+		glBindTexture(GL_TEXTURE_2D, bufferColourTex[i]);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	}
+
+	glGenFramebuffers(1, &bufferFBO);
+	glGenFramebuffers(1, &postProcessFBO);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, bufferFBO);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, bufferDepthTex, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, bufferDepthTex, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bufferColourTex[0], 0);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE || !bufferDepthTex || !bufferColourTex[0]) return false;
+
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	SetTextureRepeating(surfaceTexture, true);
@@ -214,6 +325,7 @@ void LandRenderer::DrawWater() {
 
 	UpdateShaderMatrices();
 	quad->Draw();
+	textureMatrix.ToIdentity();
 }
 
 void LandRenderer::SetNodes() {

@@ -16,6 +16,8 @@ public:
 	 bool InTransitionBounds();
 	 void SwitchFromScene();
 protected:
+	void DeleteShaders();
+
 	void DrawPostProcess();
 	void PresentScene();
 

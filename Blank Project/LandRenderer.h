@@ -19,7 +19,13 @@ public:
 	void SwitchFromScene();
 
 protected:
+	void DeleteShaders();
+
 	bool LoadShaders();
+
+	void DrawFog();
+	void DrawWaterBlur();
+	void PresentScene();
 
 	void DrawSkybox();
 	void DrawHeightMap();
@@ -42,13 +48,21 @@ protected:
 	Shader* sceneShader;
 	Shader* landShader;
 	Shader* waterShader;
+	Shader* fogShader;
+	Shader* waterBlurShader;
+	Shader* presentShader;
 
 	SceneNode* root;
 	Camera* camera;
 	Light* light;
 
-	GLuint shadowTex;
 	GLuint shadowFBO;
+	GLuint bufferFBO;
+	GLuint postProcessFBO;
+
+	GLuint shadowTex;
+	GLuint bufferDepthTex;
+	GLuint bufferColourTex[3];
 
 	GLuint surfaceTexture;
 	GLuint surfaceBumpMap;

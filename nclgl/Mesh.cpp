@@ -40,15 +40,6 @@ Mesh::~Mesh(void)	{
 	delete[]	weightIndices;
 }
 
-void Mesh::RandomTestStuff() {
-	glBindBuffer(GL_ARRAY_BUFFER, bufferObject[COLOUR_BUFFER]);
-	Vector4* buff = (Vector4*) glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
-	for (int i = 0; i < 3; i++) {
-		buff[i] = Vector4((double)rand() / (RAND_MAX), (double)rand() / (RAND_MAX), (double)rand() / (RAND_MAX), 1.0f);
-	}
-	glUnmapBuffer(GL_ARRAY_BUFFER);
-}
-
 void Mesh::Draw()	{
 	glBindVertexArray(arrayObject);
 	if(bufferObject[INDEX_BUFFER]) {

@@ -43,17 +43,7 @@ Renderer::Renderer(Window &parent) : OGLRenderer(parent)	{
 
 Renderer::~Renderer(void) {
 	if (active) {
-		glDeleteTextures(1, &shadowTex);
-		glDeleteFramebuffers(1, &shadowFBO);
-		glDeleteTextures(1, &bufferDepthTex);
-		glDeleteTextures(2, bufferColourTex);
-		glDeleteFramebuffers(1, &bufferFBO);
-		glDeleteFramebuffers(1, &postProcessFBO);
-		delete skyboxShader;
-		delete sceneShader;
-		delete shadowShader;
-		delete postProcessShader;
-		delete presentShader;
+		DeleteShaders();
 	}
 	delete quad;
 	delete root;
@@ -127,10 +117,12 @@ void Renderer::PresentScene() {
 	viewMatrix.ToIdentity();
 	projMatrix.ToIdentity();
 	UpdateShaderMatrices();
+	glDisable(GL_DEPTH_TEST);
 	glUniform1i(glGetUniformLocation(presentShader->GetProgram(), "diffuseTex"), 0);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, bufferColourTex[1]);
 	quad->Draw();
+	glEnable(GL_DEPTH_TEST);
 }
 
 void Renderer::SwitchToScene() {
@@ -155,6 +147,12 @@ void Renderer::SwitchFromScene()
 	if (InTransitionBounds()) {
 		camera->SetPosition(camera->GetNextNode());
 	}
+	DeleteShaders();
+	active = false;
+}
+
+void Renderer::DeleteShaders()
+{
 	glDeleteTextures(1, &shadowTex);
 	glDeleteFramebuffers(1, &shadowFBO);
 	glDeleteTextures(1, &bufferDepthTex);
@@ -166,7 +164,6 @@ void Renderer::SwitchFromScene()
 	delete shadowShader;
 	delete postProcessShader;
 	delete presentShader;
-	active = false;
 }
 
 bool Renderer::LoadShaders()
@@ -190,7 +187,8 @@ bool Renderer::LoadShaders()
 	postProcessShader = new Shader("FogVertex.glsl", "FogFragment.glsl");
 	presentShader = new Shader("TexturedVertex.glsl", "TexturedFragment.glsl");
 
-	if (!skyboxShader->LoadSuccess() || !sceneShader->LoadSuccess() || !shadowShader->LoadSuccess()) return false;
+	if (!skyboxShader->LoadSuccess() || !sceneShader->LoadSuccess() || !shadowShader->LoadSuccess() 
+		|| !postProcessShader->LoadSuccess() || !presentShader->LoadSuccess()) return false;
 
 	glGenTextures(1, &shadowTex);
 	glBindTexture(GL_TEXTURE_2D, shadowTex);
