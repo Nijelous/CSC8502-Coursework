@@ -23,6 +23,7 @@ protected:
 
 	void DrawSkybox();
 	void DrawHeightMap();
+	void DrawWater();
 
 	void SetNodes();
 	void BuildNodeLists(SceneNode* from);
@@ -32,12 +33,15 @@ protected:
 	void DrawShadowNodes();
 	void DrawNode(SceneNode* n);
 
+	bool active = true;
+
 	Mesh* quad;
 	HeightMap* heightMap;
 
 	Shader* skyboxShader;
 	Shader* sceneShader;
 	Shader* landShader;
+	Shader* waterShader;
 
 	SceneNode* root;
 	Camera* camera;
@@ -49,8 +53,12 @@ protected:
 	GLuint surfaceTexture;
 	GLuint surfaceBumpMap;
 	GLuint cubeMap;
+	GLuint waterTex;
 
 	float yMax;
+
+	float waterRotate;
+	float waterCycle;
 
 	Frustum frameFrustum;
 

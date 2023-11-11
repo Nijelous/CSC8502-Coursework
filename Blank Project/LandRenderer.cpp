@@ -18,7 +18,7 @@ LandRenderer::LandRenderer(Window& parent) : OGLRenderer(parent) {
 
 	camera = new Camera(-45.0f, 0.0f, heightmapSize * Vector3(0.5f, 5.0f, 0.5f));
 
-	light = new Light(heightmapSize * Vector3(0.5f, 1.5f, 0.5f), Vector4(1, 1, 1, 1), heightmapSize.x);
+	light = new Light(heightmapSize * Vector3(0.5f, 1.5f, 0.5f), Vector4(1, 1, 1, 1), 10000);
 
 	root = new SceneNode();
 
@@ -31,23 +31,30 @@ LandRenderer::LandRenderer(Window& parent) : OGLRenderer(parent) {
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
 
-	camera->AddNode(camera->GetPosition());
-	camera->AddNode(Vector3(2000, 1250, 2000));
-	camera->AddNode(Vector3(2000, 580, 2000));
-	camera->AddNode(Vector3(1000, 580, 920));
-	camera->AddNode(Vector3(2320, 580, 1030));
-	camera->AddNode(Vector3(2820, 280, 2600));
-	camera->AddNode(Vector3(2820, 280, 2600));
-	camera->AddNode(Vector3(2000, 3000, 2000));
+	waterRotate = 0.0f;
+	waterCycle = 0.0f;
+
+	camera->AddNode(heightmapSize * Vector3(0.5f, 5.0f, 0.5f));
+	camera->AddNode(heightmapSize * Vector3(0.5f, 1.0f, 0.5f));
+	camera->AddNode(heightmapSize * Vector3(0.9f, 1.0f, 0.9f));
+	camera->AddNode(heightmapSize * Vector3(0.9f, 1.0f, 0.1f));
+	camera->AddNode(heightmapSize * Vector3(0.6f, 1.0f, 0.5f));
+	camera->AddNode(heightmapSize * Vector3(0.7f, 0.5f, 0.6f));
+	camera->AddNode(heightmapSize * Vector3(0.7f, 0.5f, 0.6f));
+	camera->AddNode(heightmapSize * Vector3(0.5f, 1.0f, 0.5f) + Vector3(0, 3000.0f, 0));
 }
 
 LandRenderer::~LandRenderer() {
-	glDeleteTextures(1, &shadowTex);
-	glDeleteFramebuffers(1, &shadowFBO);
-	delete quad;
+	if (active) {
+		glDeleteTextures(1, &shadowTex);
+		glDeleteFramebuffers(1, &shadowFBO);
+		delete skyboxShader;
+		delete sceneShader;
+		delete landShader;
+		delete waterShader;
+	}
 	delete heightMap;
-	delete skyboxShader;
-	delete sceneShader;
+	delete quad;
 	delete root;
 	delete camera;
 	delete light;
@@ -59,6 +66,9 @@ void LandRenderer::UpdateScene(float dt) {
 	frameFrustum.FromMatrix(projMatrix * viewMatrix);
 
 	root->Update(dt);
+
+	waterRotate += dt * 2.0f;
+	waterCycle += dt * 0.25f;
 }
 
 void LandRenderer::RenderScene() {
@@ -71,12 +81,14 @@ void LandRenderer::RenderScene() {
 
 	DrawSkybox();
 	DrawHeightMap();
-	//DrawNodes();
+	DrawWater();
+	DrawNodes();
 	ClearNodeLists();
 }
 
 void LandRenderer::SwitchToScene() {
 	init = LoadShaders();
+	active = true;
 }
 
 bool LandRenderer::InTransitionBounds()
@@ -89,27 +101,37 @@ void LandRenderer::SwitchFromScene()
 	if (InTransitionBounds()) {
 		camera->SetPosition(camera->GetNextNode());
 	}
+	glDeleteTextures(1, &shadowTex);
+	glDeleteFramebuffers(1, &shadowFBO);
+	delete skyboxShader;
+	delete sceneShader;
+	delete landShader;
+	delete waterShader;
+	active = false;
 }
 
 bool LandRenderer::LoadShaders()
 {
-	heightMap = new HeightMap(TEXTUREDIR"noise.png");
+	heightMap = new HeightMap(TEXTUREDIR"swampHeightmap.png");
 
-	surfaceTexture = SOIL_load_OGL_texture(TEXTUREDIR"Barren Reds.JPG", SOIL_LOAD_AUTO, 1, SOIL_FLAG_MIPMAPS);
-	surfaceBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"Barren RedsDOT3.JPG", SOIL_LOAD_AUTO, 2, SOIL_FLAG_MIPMAPS);
+	surfaceTexture = SOIL_load_OGL_texture(TEXTUREDIR"Swampland.JPG", SOIL_LOAD_AUTO, 1, SOIL_FLAG_MIPMAPS);
+	surfaceBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"SwamplandDOT3.JPG", SOIL_LOAD_AUTO, 2, SOIL_FLAG_MIPMAPS);
 
 	cubeMap = SOIL_load_OGL_cubemap(
 		TEXTUREDIR"GreenSky_right.jpg", TEXTUREDIR"GreenSky_left.jpg",
 		TEXTUREDIR"GreenSky_up.jpg", TEXTUREDIR"GreenSky_down.jpg",
-		TEXTUREDIR"GreenSky_front.jpg", TEXTUREDIR"GreenSky_back.jpg", SOIL_LOAD_RGB, 3, 0);
+		TEXTUREDIR"GreenSky_front.jpg", TEXTUREDIR"GreenSky_back.jpg", SOIL_LOAD_RGB, 5, 0);
 
-	if (!cubeMap || !surfaceTexture || !surfaceBumpMap) return false;
+	waterTex = SOIL_load_OGL_texture(TEXTUREDIR"swampWater.TGA", SOIL_LOAD_AUTO, 6, SOIL_FLAG_MIPMAPS);
+
+	if (!cubeMap || !surfaceTexture || !surfaceBumpMap || !waterTex) return false;
 
 	skyboxShader = new Shader("SkyboxVertex.glsl", "SkyboxFragment.glsl");
 	sceneShader = new Shader("PerPixelSceneVertex.glsl", "PerPixelSceneFragment.glsl");
 	landShader = new Shader("PerPixelVertex.glsl", "PerPixelFragment.glsl");
+	waterShader = new Shader("ReflectVertex.glsl", "ReflectFragment.glsl");
 
-	if (!skyboxShader->LoadSuccess() || !sceneShader->LoadSuccess() || !landShader->LoadSuccess()) return false;
+	if (!skyboxShader->LoadSuccess() || !sceneShader->LoadSuccess() || !landShader->LoadSuccess() || !waterShader->LoadSuccess()) return false;
 
 	glGenTextures(1, &shadowTex);
 	glBindTexture(GL_TEXTURE_2D, shadowTex);
@@ -129,16 +151,17 @@ bool LandRenderer::LoadShaders()
 
 	SetTextureRepeating(surfaceTexture, true);
 	SetTextureRepeating(surfaceBumpMap, true);
+	SetTextureRepeating(waterTex, true);
 
 	return true;
 }
 
 void LandRenderer::DrawSkybox() {
-	glDepthMask(GL_FALSE);
+ 	glDepthMask(GL_FALSE);
 
 	BindShader(skyboxShader);
 
-	glUniform1i(glGetUniformLocation(skyboxShader->GetProgram(), "cubeTex"), 1);
+ 	glUniform1i(glGetUniformLocation(skyboxShader->GetProgram(), "cubeTex"), 1);
 	glActiveTexture(GL_TEXTURE1);
 	glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMap);
 
@@ -166,6 +189,31 @@ void LandRenderer::DrawHeightMap() {
 
 	UpdateShaderMatrices();
 	heightMap->Draw();
+}
+
+void LandRenderer::DrawWater() {
+	BindShader(waterShader);
+
+	glUniform3fv(glGetUniformLocation(waterShader->GetProgram(), "cameraPos"), 1, (float*)&camera->GetPosition());
+
+	glUniform1i(glGetUniformLocation(waterShader->GetProgram(), "diffuseTex"), 0);
+	glUniform1i(glGetUniformLocation(waterShader->GetProgram(), "cubeTex"), 2);
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, waterTex);
+
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMap);
+
+	Vector3 hSize = heightMap->GetHeightmapSize();
+
+	modelMatrix = Matrix4::Translation(hSize * 0.5f - Vector3(0, 35.0f, 0)) * Matrix4::Scale(hSize * 0.5f) * Matrix4::Rotation(90, Vector3(1, 0, 0));
+
+	textureMatrix = Matrix4::Translation(Vector3(waterCycle, 0.0f, waterCycle)) * 
+		Matrix4::Scale(Vector3(10, 10, 10)) * Matrix4::Rotation(waterRotate, Vector3(0, 0, 1));
+
+	UpdateShaderMatrices();
+	quad->Draw();
 }
 
 void LandRenderer::SetNodes() {

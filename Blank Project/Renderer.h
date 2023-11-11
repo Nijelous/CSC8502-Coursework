@@ -16,6 +16,9 @@ public:
 	 bool InTransitionBounds();
 	 void SwitchFromScene();
 protected:
+	void DrawPostProcess();
+	void PresentScene();
+
 	bool LoadShaders();
 
 	void DrawShadowScene();
@@ -31,6 +34,8 @@ protected:
 	void DrawShadowNodes();
 	void DrawNode(SceneNode* n);
 
+	bool active = true;
+
 	Mesh* quad;
 	Mesh* sphere;
 	Mesh* asteroid;
@@ -38,6 +43,8 @@ protected:
 	Shader* skyboxShader;
 	Shader* sceneShader;
 	Shader* shadowShader;
+	Shader* postProcessShader;
+	Shader* presentShader;
 
 	SceneNode* root;
 	SceneNode* planetCore;
@@ -46,6 +53,11 @@ protected:
 
 	GLuint shadowTex;
 	GLuint shadowFBO;
+	GLuint bufferFBO;
+	GLuint postProcessFBO;
+
+	GLuint bufferDepthTex;
+	GLuint bufferColourTex[2];
 
 	GLuint planetTexture;
 	GLuint planetBumpMap;

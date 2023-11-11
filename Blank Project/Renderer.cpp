@@ -6,6 +6,8 @@
 
 #define SHADOWSIZE 2048
 
+#define POST_PASSES 10
+
 Renderer::Renderer(Window &parent) : OGLRenderer(parent)	{
 	quad = Mesh::GenerateQuad();
 	sphere = Mesh::LoadFromMeshFile("Sphere.msh");
@@ -39,13 +41,21 @@ Renderer::Renderer(Window &parent) : OGLRenderer(parent)	{
 	camera->AddNode(boundingCentre);
 }
 
-Renderer::~Renderer(void)	{
-	glDeleteTextures(1, &shadowTex);
-	glDeleteFramebuffers(1, &shadowFBO);
+Renderer::~Renderer(void) {
+	if (active) {
+		glDeleteTextures(1, &shadowTex);
+		glDeleteFramebuffers(1, &shadowFBO);
+		glDeleteTextures(1, &bufferDepthTex);
+		glDeleteTextures(2, bufferColourTex);
+		glDeleteFramebuffers(1, &bufferFBO);
+		glDeleteFramebuffers(1, &postProcessFBO);
+		delete skyboxShader;
+		delete sceneShader;
+		delete shadowShader;
+		delete postProcessShader;
+		delete presentShader;
+	}
 	delete quad;
-	delete skyboxShader;
-	delete sceneShader;
-	delete shadowShader;
 	delete root;
 	delete camera;
 	delete light;
@@ -54,6 +64,7 @@ Renderer::~Renderer(void)	{
 void Renderer::UpdateScene(float dt) {
 	camera->UpdateCamera(dt);
 	viewMatrix = camera->BuildViewMatrix();
+	projMatrix = Matrix4::Perspective(1.0f, 15000.0f, (float)width / (float)height, 45.0f);
 	frameFrustum.FromMatrix(projMatrix * viewMatrix);
 
 	planetCore->SetTransform(planetCore->GetTransform() * Matrix4::Rotation(-30.0f * dt, Vector3(0, 1, 0)));
@@ -66,21 +77,65 @@ void Renderer::UpdateScene(float dt) {
 	root->Update(dt);
 }
 
-void Renderer::RenderScene()	{
+void Renderer::RenderScene() {
 	BuildNodeLists(root);
 	SortNodeLists();
 
-	//std::cout << camera->GetPosition() << "\n";
-
-	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+	glBindFramebuffer(GL_FRAMEBUFFER, bufferFBO);
+	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
 	DrawSkybox();
 	DrawShadowScene();
 	DrawNodes();
+
+	glBindFramebuffer(GL_FRAMEBUFFER, postProcessFBO);
+
+	DrawPostProcess();
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	PresentScene();
+}
+
+void Renderer::DrawPostProcess() {
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bufferColourTex[1], 0);
+	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+
+	BindShader(postProcessShader);
+	modelMatrix.ToIdentity();
+	viewMatrix.ToIdentity();
+	projMatrix.ToIdentity();
+	UpdateShaderMatrices();
+
+	glDisable(GL_DEPTH_TEST);
+
+	glUniform1i(glGetUniformLocation(postProcessShader->GetProgram(), "sceneTex"), 0);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, bufferColourTex[0]);
+	float distance = sqrt(pow(camera->GetPosition().x - boundingCentre.x, 2) +
+		pow(camera->GetPosition().y - boundingCentre.y, 2) + pow(camera->GetPosition().z - boundingCentre.z, 2));
+	glUniform1f(glGetUniformLocation(postProcessShader->GetProgram(), "visibility"), distance > 2200.0f ? 1 : (distance - 1500) / 700);
+	glUniform3fv(glGetUniformLocation(postProcessShader->GetProgram(), "fogColour"), 1, (float*)&Vector3(0.286f, 0.407f, 0));
+	quad->Draw();
+	glEnable(GL_DEPTH_TEST);
+}
+
+void Renderer::PresentScene() {
+	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+	BindShader(presentShader);
+	modelMatrix.ToIdentity();
+	viewMatrix.ToIdentity();
+	projMatrix.ToIdentity();
+	UpdateShaderMatrices();
+	glUniform1i(glGetUniformLocation(presentShader->GetProgram(), "diffuseTex"), 0);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, bufferColourTex[1]);
+	quad->Draw();
 }
 
 void Renderer::SwitchToScene() {
 	init = LoadShaders();
+	active = true;
 }
 
 bool Renderer::InTransitionBounds()
@@ -100,6 +155,18 @@ void Renderer::SwitchFromScene()
 	if (InTransitionBounds()) {
 		camera->SetPosition(camera->GetNextNode());
 	}
+	glDeleteTextures(1, &shadowTex);
+	glDeleteFramebuffers(1, &shadowFBO);
+	glDeleteTextures(1, &bufferDepthTex);
+	glDeleteTextures(2, bufferColourTex);
+	glDeleteFramebuffers(1, &bufferFBO);
+	glDeleteFramebuffers(1, &postProcessFBO);
+	delete skyboxShader;
+	delete sceneShader;
+	delete shadowShader;
+	delete postProcessShader;
+	delete presentShader;
+	active = false;
 }
 
 bool Renderer::LoadShaders()
@@ -120,6 +187,8 @@ bool Renderer::LoadShaders()
 	skyboxShader = new Shader("SkyboxVertex.glsl", "SkyboxFragment.glsl");
 	sceneShader = new Shader("PerPixelSceneVertex.glsl", "PerPixelSceneFragment.glsl");
 	shadowShader = new Shader("ShadowVert.glsl", "ShadowFrag.glsl");
+	postProcessShader = new Shader("FogVertex.glsl", "FogFragment.glsl");
+	presentShader = new Shader("TexturedVertex.glsl", "TexturedFragment.glsl");
 
 	if (!skyboxShader->LoadSuccess() || !sceneShader->LoadSuccess() || !shadowShader->LoadSuccess()) return false;
 
@@ -139,6 +208,36 @@ bool Renderer::LoadShaders()
 	glDrawBuffer(GL_NONE);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+	glGenTextures(1, &bufferDepthTex);
+	glBindTexture(GL_TEXTURE_2D, bufferDepthTex);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, width, height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
+
+	for (int i = 0; i < 2; i++) {
+		glGenTextures(1, &bufferColourTex[i]);
+		glBindTexture(GL_TEXTURE_2D, bufferColourTex[i]);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	}
+	
+	glGenFramebuffers(1, &bufferFBO);
+	glGenFramebuffers(1, &postProcessFBO);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, bufferFBO);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, bufferDepthTex, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, bufferDepthTex, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bufferColourTex[0], 0);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE || !bufferDepthTex || !bufferColourTex[0]) return false;
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
 	SetTextureMirrorRepeating(planetTexture, true);
 	SetTextureMirrorRepeating(planetBumpMap, true);
 	SetTextureRepeating(asteroidTexture, true);
@@ -150,6 +249,7 @@ bool Renderer::LoadShaders()
 void Renderer::DrawShadowScene() {
 	glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
 
+	glClear(GL_DEPTH_BUFFER_BIT);
 	glViewport(0, 0, SHADOWSIZE, SHADOWSIZE);
 	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 
@@ -164,7 +264,7 @@ void Renderer::DrawShadowScene() {
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	glViewport(0, 0, width, height);
 
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindFramebuffer(GL_FRAMEBUFFER, bufferFBO);
 }
 
 void Renderer::DrawSkybox() {
