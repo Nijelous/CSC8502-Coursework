@@ -19,6 +19,8 @@ public:
 	void SwitchFromScene();
 
 protected:
+	void DayNightCycle();
+
 	void DeleteShaders();
 
 	bool LoadShaders();
@@ -53,8 +55,11 @@ protected:
 	Shader* presentShader;
 
 	SceneNode* root;
+	SceneNode* lightRoot;
 	Camera* camera;
 	Light* light;
+	Light* dayLight;
+	Light* nightLight;
 
 	GLuint shadowFBO;
 	GLuint bufferFBO;
@@ -66,8 +71,12 @@ protected:
 
 	GLuint surfaceTexture;
 	GLuint surfaceBumpMap;
+	GLuint sunTexture;
+	GLuint sunBumpMap;
 	GLuint cubeMap;
 	GLuint waterTex;
+
+	bool day = true;
 
 	float yMax;
 

@@ -3,6 +3,7 @@
 #include "../nclgl/HeightMap.h"
 #include "../nclgl/SceneNode.h"
 #include "../nclgl/Camera.h"
+#include "../nclgl/Matrix3.h"
 #include <algorithm>
 
 #define SHADOWSIZE 2048
@@ -18,11 +19,18 @@ LandRenderer::LandRenderer(Window& parent) : OGLRenderer(parent) {
 
 	camera = new Camera(-45.0f, 0.0f, heightmapSize * Vector3(0.5f, 0.0f, 0.5f) + Vector3(0.0f, 2400.0f, 0.0f));
 
-	light = new Light(heightmapSize * Vector3(0.5f, 1.5f, 0.5f), Vector4(1, 1, 1, 1), 10000);
+	dayLight = new Light(heightmapSize * Vector3(0.5f, 0.0f, 0.5f), Vector4(1, 1, 1, 1), 40000);
+	nightLight = new Light(heightmapSize * Vector3(0.5f, 0.0f, 1.0f), Vector4(0.678f, 0.847f, 0.901f, 1), 20000);
+
+	light = dayLight;
 
 	root = new SceneNode();
 
-	//SetNodes();
+	SetNodes();
+
+	Vector4 lightPos = (lightRoot->GetTransform() * Vector4(1, 1, 1, 1));
+
+	std::cout << (Vector3(lightPos.x-1, lightPos.y-1, lightPos.z-1)) << "\n";
 
 	projMatrix = Matrix4::Perspective(1.0f, 10000.0f, (float)width / (float)height, 45.0f);
 
@@ -48,11 +56,13 @@ LandRenderer::~LandRenderer() {
 	if (active) {
 		DeleteShaders();
 	}
-	delete heightMap;
 	delete quad;
 	delete root;
+	delete lightRoot;
 	delete camera;
 	delete light;
+	if(!day) delete dayLight;
+	else delete nightLight;
 }
 
 void LandRenderer::UpdateScene(float dt) {
@@ -62,6 +72,19 @@ void LandRenderer::UpdateScene(float dt) {
 	frameFrustum.FromMatrix(projMatrix * viewMatrix);
 
 	root->Update(dt);
+
+	lightRoot->SetTransform(lightRoot->GetTransform() * Matrix4::Rotation(5*dt, Vector3(1, 0, 0)));
+
+	lightRoot->Update(dt);
+
+	Vector4 dayPos = (*(lightRoot->GetChildIteratorStart()))->GetWorldTransform() * Vector4(1, 1, 1, 1);
+	Vector4 nightPos = (*(lightRoot->GetChildIteratorStart() + 1))->GetWorldTransform() * Vector4(1, 1, 1, 1);
+
+	dayLight->SetPosition(Vector3(dayPos.x, dayPos.y, dayPos.z));
+
+	nightLight->SetPosition(Vector3(nightPos.x, nightPos.y, nightPos.z));
+
+	DayNightCycle();
 
 	waterRotate += dt * 2.0f;
 	waterCycle += dt * 0.25f;
@@ -165,6 +188,16 @@ void LandRenderer::SwitchFromScene()
 	active = false;
 }
 
+void LandRenderer::DayNightCycle()
+{
+	if (day) {
+		if (dayLight->GetPosition().y < 0) { light = nightLight; day = false; }
+	}
+	else if (!day) {
+		if (nightLight->GetPosition().y < 0) { light = dayLight; day = true; }
+	}
+}
+
 void LandRenderer::DeleteShaders() {
 	glDeleteTextures(1, &shadowTex);
 	glDeleteFramebuffers(1, &shadowFBO);
@@ -179,6 +212,7 @@ void LandRenderer::DeleteShaders() {
 	delete fogShader;
 	delete waterBlurShader;
 	delete presentShader;
+	delete heightMap;
 }
 
 bool LandRenderer::LoadShaders()
@@ -187,6 +221,9 @@ bool LandRenderer::LoadShaders()
 
 	surfaceTexture = SOIL_load_OGL_texture(TEXTUREDIR"Swampland.JPG", SOIL_LOAD_AUTO, 1, SOIL_FLAG_MIPMAPS);
 	surfaceBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"SwamplandDOT3.JPG", SOIL_LOAD_AUTO, 2, SOIL_FLAG_MIPMAPS);
+
+	sunTexture = SOIL_load_OGL_texture(TEXTUREDIR"Sun.JPG", SOIL_LOAD_AUTO, 3, SOIL_FLAG_MIPMAPS);
+	sunBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"SunDOT3.JPG", SOIL_LOAD_AUTO, 4, SOIL_FLAG_MIPMAPS);
 
 	cubeMap = SOIL_load_OGL_cubemap(
 		TEXTUREDIR"GreenSky_right.jpg", TEXTUREDIR"GreenSky_left.jpg",
@@ -329,7 +366,15 @@ void LandRenderer::DrawWater() {
 }
 
 void LandRenderer::SetNodes() {
-
+	SceneNode* p = new SceneNode();
+	p->SetTransform(Matrix4::Translation(heightMap->GetHeightmapSize() * Vector3(0.5f, 0.0f, 0.5f)));
+	lightRoot = p;
+	SceneNode* d = new SceneNode();
+	d->SetTransform(Matrix4::Translation(heightMap->GetHeightmapSize() * Vector3(0.0f, 0.0f, -0.5f)));
+	lightRoot->AddChild(d);
+	SceneNode* n = new SceneNode();
+	n->SetTransform(Matrix4::Translation(heightMap->GetHeightmapSize() * Vector3(0.0f, 0.0f, 0.5f)));
+	lightRoot->AddChild(n);
 }
 
 void LandRenderer::BuildNodeLists(SceneNode* from) {

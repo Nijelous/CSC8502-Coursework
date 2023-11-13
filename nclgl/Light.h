@@ -17,6 +17,7 @@ public:
 
 	Vector3 GetPosition() const { return position; }
 	void SetPosition(const Vector3& val) { position = val; }
+	void SetPosition(const Vector4& val) { position.x = val.x; position.y = val.y; position.z = val.z; }
 
 	float GetRadius() const { return radius; }
 	void SetRadius(float val) { radius = val; }
