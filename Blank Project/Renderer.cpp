@@ -249,8 +249,8 @@ void Renderer::RenderScene() {
 	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
 	DrawSkybox();
-	if (!planet) DrawWater();
 	DrawShadowScene();
+	if (!planet) DrawWater();
 	if (!planet) DrawHeightMap();
 	DrawNodes();
 
@@ -263,8 +263,8 @@ void Renderer::RenderScene() {
 	projMatrix.ToIdentity();
 	textureMatrix.ToIdentity();
 
-	DrawFog();
 	if (!planet) DrawWaterBlur();
+	DrawFog();
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -370,6 +370,7 @@ void Renderer::DrawWater() {
 
 	glUniform1i(glGetUniformLocation(waterShader->GetProgram(), "diffuseTex"), 0);
 	glUniform1i(glGetUniformLocation(waterShader->GetProgram(), "cubeTex"), 2);
+	glUniform1i(glGetUniformLocation(waterShader->GetProgram(), "shadowTex"), 3);
 
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, waterTex);
@@ -379,6 +380,9 @@ void Renderer::DrawWater() {
 	else if (day) glBindTexture(GL_TEXTURE_CUBE_MAP, landDaySkybox);
 	else glBindTexture(GL_TEXTURE_CUBE_MAP, landNightSkybox);
 
+	glActiveTexture(GL_TEXTURE3);
+	glBindTexture(GL_TEXTURE_2D, shadowTex);
+
 	Vector3 hSize = heightMap->GetHeightmapSize();
 
 	modelMatrix = Matrix4::Translation(hSize * 0.5f - Vector3(0, 35.0f, 0)) * Matrix4::Scale(hSize * 0.5f) * Matrix4::Rotation(90, Vector3(1, 0, 0));
@@ -387,6 +391,7 @@ void Renderer::DrawWater() {
 		Matrix4::Scale(Vector3(10, 10, 10)) * Matrix4::Rotation(waterRotate, Vector3(0, 0, 1));
 
 	UpdateShaderMatrices();
+	SetShaderLight(*activeLight);
 	quad->Draw();
 	textureMatrix.ToIdentity();
 }
@@ -408,8 +413,32 @@ void Renderer::DrawShadowScene() {
 
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	glViewport(0, 0, width, height);
+	viewMatrix = activeCamera->BuildViewMatrix();
+	projMatrix = Matrix4::Perspective(1.0f, 15000.0f, (float)width / (float)height, 45.0f);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, bufferFBO);
+}
+void Renderer::DrawWaterBlur()
+{
+	if (activeCamera->GetPosition().y < 92.5f && activeCamera->GetPosition().y > heightMap->GetHeightAt(activeCamera->GetPosition().x, activeCamera->GetPosition().z)) {
+		BindShader(waterBlurShader);
+		UpdateShaderMatrices();
+		glUniform3fv(glGetUniformLocation(waterBlurShader->GetProgram(), "waterColour"), 1, (float*)&Vector3(0.509f, 1.0f, 0.518f));
+		glActiveTexture(GL_TEXTURE0);
+		glUniform1i(glGetUniformLocation(waterBlurShader->GetProgram(), "sceneTex"), 0);
+		for (int i = 0; i < 4; i++) {
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bufferColourTex[1], 0);
+			glUniform1i(glGetUniformLocation(waterBlurShader->GetProgram(), "isVertical"), 0);
+
+			glBindTexture(GL_TEXTURE_2D, bufferColourTex[0]);
+			quad->Draw();
+
+			glUniform1i(glGetUniformLocation(waterBlurShader->GetProgram(), "isVertical"), 1);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bufferColourTex[0], 0);
+			glBindTexture(GL_TEXTURE_2D, bufferColourTex[1]);
+			quad->Draw();
+		}
+	}
 }
 
 void Renderer::DrawFog() {
@@ -435,29 +464,6 @@ void Renderer::DrawFog() {
 	glUniform1f(glGetUniformLocation(fogShader->GetProgram(), "visibility"), visibility);
 	glUniform3fv(glGetUniformLocation(fogShader->GetProgram(), "fogColour"), 1, (float*)&Vector3(0.286f, 0.407f, 0));
 	quad->Draw();
-}
-
-void Renderer::DrawWaterBlur()
-{
-	if (activeCamera->GetPosition().y < 92.5f && activeCamera->GetPosition().y > heightMap->GetHeightAt(activeCamera->GetPosition().x, activeCamera->GetPosition().z)) {
-		BindShader(waterBlurShader);
-		UpdateShaderMatrices();
-		glUniform3fv(glGetUniformLocation(waterBlurShader->GetProgram(), "waterColour"), 1, (float*)&Vector3(0.509f, 1.0f, 0.518f));
-		glActiveTexture(GL_TEXTURE0);
-		glUniform1i(glGetUniformLocation(waterBlurShader->GetProgram(), "sceneTex"), 0);
-		for (int i = 0; i < 4; i++) {
-			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bufferColourTex[1], 0);
-			glUniform1i(glGetUniformLocation(waterBlurShader->GetProgram(), "isVertical"), 0);
-
-			glBindTexture(GL_TEXTURE_2D, bufferColourTex[0]);
-			quad->Draw();
-
-			glUniform1i(glGetUniformLocation(waterBlurShader->GetProgram(), "isVertical"), 1);
-			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bufferColourTex[0], 0);
-			glBindTexture(GL_TEXTURE_2D, bufferColourTex[1]);
-			quad->Draw();
-		}
-	}
 }
 
 void Renderer::PresentScene() {
@@ -510,7 +516,7 @@ void Renderer::SetNodes() {
 	SceneNode* n = new SceneNode();
 	n->SetTransform(Matrix4::Translation(heightMap->GetHeightmapSize() * Vector3(0.0f, 0.0f, 0.5f)));
 	lightRoot->AddChild(n);
-	for (int i = 0; i < 10; i++) {
+	for (int i = 0; i < 25; i++) {
 		SceneNode* t = new SceneNode();
 		t->SetColour(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
 		int randomX = rand() / (RAND_MAX / 8176);

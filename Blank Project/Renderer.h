@@ -30,8 +30,8 @@ protected:
 
 	void DrawShadowScene();
 
-	void DrawFog();
 	void DrawWaterBlur();
+	void DrawFog();
 	void PresentScene();
 
 	void SetNodes();
