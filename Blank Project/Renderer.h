@@ -5,28 +5,34 @@
 class Camera;
 class SceneNode;
 class Light;
+class HeightMap;
 
 class Renderer : public OGLRenderer	{
 public:
 	Renderer(Window &parent);
 	 ~Renderer(void);
-	 void RenderScene()				override;
 	 void UpdateScene(float dt)	override;
-	 void SwitchToScene() override;
-	 bool InTransitionBounds();
-	 void SwitchFromScene();
+	 void RenderScene()	override;
+
 protected:
-	void DeleteShaders();
+	void SwitchScene();
 
-	void DrawPostProcess();
-	void PresentScene();
+	void LoadPlanet();
+	void LoadLand();
 
-	bool LoadShaders();
+	bool InTransitionBounds();
 
-	void DrawShadowScene();
-	void DrawMainScene();
+	void DayNightCycle();
 
 	void DrawSkybox();
+	void DrawHeightMap();
+	void DrawWater();
+
+	void DrawShadowScene();
+
+	void DrawFog();
+	void DrawWaterBlur();
+	void PresentScene();
 
 	void SetNodes();
 	void BuildNodeLists(SceneNode* from);
@@ -36,28 +42,37 @@ protected:
 	void DrawShadowNodes();
 	void DrawNode(SceneNode* n);
 
-	bool active = true;
-
 	Mesh* quad;
 	Mesh* sphere;
 	Mesh* asteroid;
+	Mesh* tree;
+	HeightMap* heightMap;
 
 	Shader* skyboxShader;
 	Shader* sceneShader;
+	Shader* waterShader;
 	Shader* shadowShader;
-	Shader* postProcessShader;
+	Shader* fogShader;
+	Shader* waterBlurShader;
 	Shader* presentShader;
 
-	SceneNode* root;
+	SceneNode* spaceRoot;
 	SceneNode* planetCore;
-	Camera* camera;
-	Light* light;
+	SceneNode* landRoot;
+	SceneNode* lightRoot;
+	Camera* activeCamera;
+	Camera* spaceCamera;
+	Camera* landCamera;
+	Light* activeLight;
+	Light* spaceLight;
+	Light* dayLight;
+	Light* nightLight;
 
-	GLuint shadowTex;
 	GLuint shadowFBO;
 	GLuint bufferFBO;
 	GLuint postProcessFBO;
 
+	GLuint shadowTex;
 	GLuint bufferDepthTex;
 	GLuint bufferColourTex[2];
 
@@ -65,10 +80,25 @@ protected:
 	GLuint planetBumpMap;
 	GLuint asteroidTexture;
 	GLuint asteroidBumpMap;
-	GLuint cubeMap;
+	GLuint surfaceTexture;
+	GLuint surfaceBumpMap;
+	GLuint barkTexture;
+	GLuint barkBumpMap;
+	GLuint waterTex;
+	GLuint spaceSkybox;
+	GLuint landDaySkybox;
+	GLuint landNightSkybox;
 
 	Vector3 boundingCentre;
 	float boundingRadius;
+
+	bool planet = true;
+	bool day = true;
+
+	float yMax;
+
+	float waterRotate;
+	float waterCycle;
 
 	Frustum frameFrustum;
 
