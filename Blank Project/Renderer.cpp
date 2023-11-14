@@ -3,6 +3,8 @@
 #include "../nclgl/SceneNode.h"
 #include "../nclgl/Light.h"
 #include "../nclgl/HeightMap.h"
+#include "../nclgl/MeshAnimation.h"
+#include "../nclgl/MeshMaterial.h"
 #include <algorithm>
 
 #define SHADOWSIZE 2048
@@ -12,6 +14,9 @@ Renderer::Renderer(Window &parent) : OGLRenderer(parent)	{
 	sphere = Mesh::LoadFromMeshFile("Sphere.msh");
 	asteroid = Mesh::LoadFromMeshFile("Rock.msh");
 	tree = Mesh::LoadFromMeshFile("Tree.msh");
+	roleT = Mesh::LoadFromMeshFile("Role_T.msh");
+	anim = new MeshAnimation("Role_T.anm");
+	animMaterial = new MeshMaterial("Role_T.mat");
 
 	heightMap = new HeightMap(TEXTUREDIR"swampHeightmap.png");
 
@@ -26,6 +31,9 @@ Renderer::Renderer(Window &parent) : OGLRenderer(parent)	{
 
 	barkTexture = SOIL_load_OGL_texture(TEXTUREDIR"Tree Bark.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
 	barkBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"Tree BarkDOT3.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
+
+	leavesTexture = SOIL_load_OGL_texture(TEXTUREDIR"Leaves.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
+	leavesBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"LeavesDOT3.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
 
 	waterTex = SOIL_load_OGL_texture(TEXTUREDIR"swampWater.TGA", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
 
@@ -44,19 +52,31 @@ Renderer::Renderer(Window &parent) : OGLRenderer(parent)	{
 		TEXTUREDIR"LightGreen_top.png", TEXTUREDIR"LightGreen_bottom.png",
 		TEXTUREDIR"LightGreen_front.png", TEXTUREDIR"LightGreen_back.png", SOIL_LOAD_RGB, SOIL_CREATE_NEW_ID, 0);
 
+	for (int i = 0; i < roleT->GetSubMeshCount(); i++) {
+		const MeshMaterialEntry* matEntry = animMaterial->GetMaterialForLayer(i);
+
+		const string* filename = nullptr;
+		matEntry->GetEntry("Diffuse", &filename);
+		string path = TEXTUREDIR + *filename;
+		GLuint texID = SOIL_load_OGL_texture(path.c_str(), SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y);
+		matTextures.emplace_back(texID);
+	}
+
 	if (!planetTexture || !planetBumpMap || !asteroidTexture || !asteroidBumpMap || !surfaceTexture 
 		|| !surfaceBumpMap || !barkTexture || !barkBumpMap || !waterTex || !spaceSkybox 
 		|| !landDaySkybox || !landNightSkybox) return;
 
 	skyboxShader = new Shader("SkyboxVertex.glsl", "SkyboxFragment.glsl");
 	sceneShader = new Shader("PerPixelSceneVertex.glsl", "PerPixelSceneFragment.glsl");
+	animShader = new Shader("SkinningVertex.glsl", "TexturedFragment.glsl");
 	waterShader = new Shader("ReflectVertex.glsl", "ReflectFragment.glsl");
 	shadowShader = new Shader("ShadowVert.glsl", "ShadowFrag.glsl");
+	shadowAnimShader = new Shader("SkinningShadowVert.glsl", "ShadowFrag.glsl");
 	fogShader = new Shader("FogVertex.glsl", "FogFragment.glsl");
 	waterBlurShader = new Shader("WaterBlurVert.glsl", "WaterBlurFrag.glsl");
 	presentShader = new Shader("TexturedVertex.glsl", "TexturedFragment.glsl");
 
-	if (!skyboxShader->LoadSuccess() || !sceneShader->LoadSuccess() || !waterShader->LoadSuccess()
+	if (!skyboxShader->LoadSuccess() || !sceneShader->LoadSuccess() || !animShader->LoadSuccess() || !waterShader->LoadSuccess()
 		|| !shadowShader->LoadSuccess() || !fogShader->LoadSuccess() || !waterBlurShader->LoadSuccess()
 		|| !presentShader->LoadSuccess()) return;
 
@@ -151,6 +171,10 @@ Renderer::Renderer(Window &parent) : OGLRenderer(parent)	{
 
 	yMax = 2500.0f;
 
+	currentFrame = 0;
+	frameTime = 0.0f;
+	direction = 1;
+
 	spaceCamera->AddNode(Vector3(0, 30, 175));
 	spaceCamera->AddNode(Vector3(-1500, 30, -700));
 	spaceCamera->AddNode(Vector3(-2100, -1360, -2480));
@@ -182,6 +206,7 @@ Renderer::~Renderer(void) {
 	glDeleteFramebuffers(1, &postProcessFBO);
 	delete skyboxShader;
 	delete sceneShader;
+	delete animShader;
 	delete waterShader;
 	delete shadowShader;
 	delete fogShader;
@@ -192,6 +217,10 @@ Renderer::~Renderer(void) {
 	delete asteroid;
 	delete tree;
 	delete heightMap;
+	delete roleT;
+	delete anim;
+	delete animMaterial;
+	delete spaceRoot;
 	delete landRoot;
 	delete activeCamera;
 	if (!planet) delete spaceCamera;
@@ -236,6 +265,19 @@ void Renderer::UpdateScene(float dt) {
 
 		DayNightCycle();
 
+		frameTime -= dt;
+		while (frameTime < 0.0f) {
+			currentFrame = (currentFrame + 1) % anim->GetFrameCount();
+			frameTime += 1.0f / anim->GetFrameRate();
+		}
+		animModel = Matrix4::Translation(Vector3(0, heightMap->GetHeightAt(animPos.x, animPos.z + (direction*50*dt)) - animPos.y, direction * 50 * dt)) * animModel;
+		animPos = animPos + Vector3(0, 0, direction * 50 * dt);
+		animPos.y = heightMap->GetHeightAt(animPos.x, animPos.z);
+		if (animPos.y < 85) { 
+			animModel = Matrix4::Translation(animPos) * Matrix4::Rotation(180, Vector3(0, 1, 0)) * Matrix4::Translation(-animPos) * animModel; 
+			direction *= -1;
+		}
+
 		waterRotate += dt * 2.0f;
 		waterCycle += dt * 0.25f;
 	}
@@ -250,8 +292,11 @@ void Renderer::RenderScene() {
 
 	DrawSkybox();
 	DrawShadowScene();
-	if (!planet) DrawWater();
-	if (!planet) DrawHeightMap();
+	if (!planet) {
+		DrawWater();
+		DrawHeightMap();
+		DrawAnimation();
+	}
 	DrawNodes();
 
 	glBindFramebuffer(GL_FRAMEBUFFER, postProcessFBO);
@@ -396,6 +441,49 @@ void Renderer::DrawWater() {
 	textureMatrix.ToIdentity();
 }
 
+void Renderer::DrawAnimation() {
+	BindShader(animShader);
+	glUniform1i(glGetUniformLocation(animShader->GetProgram(), "diffuseTex"), 0);
+	modelMatrix = animModel;
+	UpdateShaderMatrices();
+	vector<Matrix4> frameMatrices;
+
+	const Matrix4* invBindPose = roleT->GetInverseBindPose();
+	const Matrix4* frameData = anim->GetJointData(currentFrame);
+
+	for (unsigned int i = 0; i < roleT->GetJointCount(); i++) {
+		frameMatrices.emplace_back(frameData[i] * invBindPose[i]);
+	}
+
+	int j = glGetUniformLocation(animShader->GetProgram(), "joints");
+	glUniformMatrix4fv(j, frameMatrices.size(), false, (float*)frameMatrices.data());
+	for (int i = 0; i < roleT->GetSubMeshCount(); i++) {
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, matTextures[i]);
+		roleT->DrawSubMesh(i);
+	}
+}
+
+void Renderer::DrawShadowAnimation()
+{
+	modelMatrix = animModel;
+	UpdateShaderMatrices();
+	vector<Matrix4> frameMatrices;
+
+	const Matrix4* invBindPose = roleT->GetInverseBindPose();
+	const Matrix4* frameData = anim->GetJointData(currentFrame);
+
+	for (unsigned int i = 0; i < roleT->GetJointCount(); i++) {
+		frameMatrices.emplace_back(frameData[i] * invBindPose[i]);
+	}
+
+	int j = glGetUniformLocation(animShader->GetProgram(), "joints");
+	glUniformMatrix4fv(j, frameMatrices.size(), false, (float*)frameMatrices.data());
+	for (int i = 0; i < roleT->GetSubMeshCount(); i++) {
+		roleT->DrawSubMesh(i);
+	}
+}
+
 void Renderer::DrawShadowScene() {
 	glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
 
@@ -403,12 +491,13 @@ void Renderer::DrawShadowScene() {
 	glViewport(0, 0, SHADOWSIZE, SHADOWSIZE);
 	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 
-	BindShader(shadowShader);
-
 	viewMatrix = Matrix4::BuildViewMatrix(activeLight->GetPosition(), (planet ? boundingCentre : heightMap->GetHeightmapSize() * Vector3(0.5f, 0.0f, 0.5f)));
 	projMatrix = Matrix4::Perspective(1, 15000, 1, 45);
 	shadowMatrix = projMatrix * viewMatrix;
 
+	BindShader(shadowAnimShader);
+	DrawShadowAnimation();
+	BindShader(shadowShader);
 	DrawShadowNodes();
 
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
@@ -483,8 +572,8 @@ void Renderer::SetNodes() {
 	p->SetModelScale(Vector3(1000.0f, 1000.0f, 1000.0f));
 	p->SetBoundingRadius(1000.0f);
 	p->SetMesh(sphere);
-	p->SetTexture(planetTexture);
-	p->SetBumpMap(planetBumpMap);
+	p->AddTexture(planetTexture);
+	p->AddBumpMap(planetBumpMap);
 	spaceRoot->AddChild(p);
 
 	SceneNode* core = new SceneNode();
@@ -500,8 +589,8 @@ void Renderer::SetNodes() {
 		a->SetModelScale(Vector3(200.0f, 200.0f, 200.0f));
 		a->SetBoundingRadius(200.0f);
 		a->SetMesh(asteroid);
-		a->SetTexture(asteroidTexture);
-		a->SetBumpMap(asteroidBumpMap);
+		a->AddTexture(asteroidTexture);
+		a->AddBumpMap(asteroidBumpMap);
 		core->AddChild(a);
 	}
 	boundingCentre = Vector3(0, -2000.0f, -2000.0f);
@@ -516,7 +605,7 @@ void Renderer::SetNodes() {
 	SceneNode* n = new SceneNode();
 	n->SetTransform(Matrix4::Translation(heightMap->GetHeightmapSize() * Vector3(0.0f, 0.0f, 0.5f)));
 	lightRoot->AddChild(n);
-	for (int i = 0; i < 25; i++) {
+	for (int i = 0; i < 50; i++) {
 		SceneNode* t = new SceneNode();
 		t->SetColour(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
 		int randomX = rand() / (RAND_MAX / 8176);
@@ -529,10 +618,14 @@ void Renderer::SetNodes() {
 		t->SetModelScale(Vector3(20.0f, 20.0f, 20.0f));
 		t->SetBoundingRadius(450.0f);
 		t->SetMesh(tree);
-		t->SetTexture(barkTexture);
-		t->SetBumpMap(barkBumpMap);
+		t->AddTexture(barkTexture);
+		t->AddTexture(leavesTexture);
+		t->AddBumpMap(barkBumpMap);
+		t->AddBumpMap(leavesBumpMap);
 		landRoot->AddChild(t);
 	}
+	animPos = Vector3(4700, heightMap->GetHeightAt(4700, 2075), 2075);
+	animModel = Matrix4::Translation(animPos) * Matrix4::Scale(Vector3(80, 80, 80));
 }
 
 void Renderer::BuildNodeLists(SceneNode* from) {
@@ -591,15 +684,29 @@ void Renderer::DrawNode(SceneNode* n) {
 		glUniformMatrix4fv(glGetUniformLocation(sceneShader->GetProgram(), "modelMatrix"), 1, false, model.values);
 
 		glUniform4fv(glGetUniformLocation(sceneShader->GetProgram(), "nodeColour"), 1, (float*)&n->GetColour());
+		if (n->GetMesh()->GetSubMeshCount() == 1) {
+			GLuint texture = n->GetTexture(0);
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, texture);
 
-		GLuint texture = n->GetTexture();
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, texture);
+			GLuint bumpMap = n->GetBumpMap(0);
+			glActiveTexture(GL_TEXTURE1);
+			glBindTexture(GL_TEXTURE_2D, bumpMap);
 
-		GLuint bumpMap = n->GetBumpMap();
-		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_2D, bumpMap);
+			n->Draw(*this);
+		}
+		else {
+			for (int i = 0; i < n->GetMesh()->GetSubMeshCount(); i++) {
+				GLuint texture = n->GetTexture(i);
+				glActiveTexture(GL_TEXTURE0);
+				glBindTexture(GL_TEXTURE_2D, texture);
 
-		n->Draw(*this);
+				GLuint bumpMap = n->GetBumpMap(i);
+				glActiveTexture(GL_TEXTURE1);
+				glBindTexture(GL_TEXTURE_2D, bumpMap);
+
+				n->GetMesh()->DrawSubMesh(i);
+			}
+		}
 	}
 }

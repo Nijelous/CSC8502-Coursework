@@ -6,6 +6,8 @@ class Camera;
 class SceneNode;
 class Light;
 class HeightMap;
+class MeshAnimation;
+class MeshMaterial;
 
 class Renderer : public OGLRenderer	{
 public:
@@ -27,6 +29,8 @@ protected:
 	void DrawSkybox();
 	void DrawHeightMap();
 	void DrawWater();
+	void DrawAnimation();
+	void DrawShadowAnimation();
 
 	void DrawShadowScene();
 
@@ -46,12 +50,17 @@ protected:
 	Mesh* sphere;
 	Mesh* asteroid;
 	Mesh* tree;
+	Mesh* roleT;
 	HeightMap* heightMap;
+	MeshAnimation* anim;
+	MeshMaterial* animMaterial;
 
 	Shader* skyboxShader;
 	Shader* sceneShader;
+	Shader* animShader;
 	Shader* waterShader;
 	Shader* shadowShader;
+	Shader* shadowAnimShader;
 	Shader* fogShader;
 	Shader* waterBlurShader;
 	Shader* presentShader;
@@ -84,10 +93,13 @@ protected:
 	GLuint surfaceBumpMap;
 	GLuint barkTexture;
 	GLuint barkBumpMap;
+	GLuint leavesTexture;
+	GLuint leavesBumpMap;
 	GLuint waterTex;
 	GLuint spaceSkybox;
 	GLuint landDaySkybox;
 	GLuint landNightSkybox;
+	vector<GLuint> matTextures;
 
 	Vector3 boundingCentre;
 	float boundingRadius;
@@ -99,6 +111,12 @@ protected:
 
 	float waterRotate;
 	float waterCycle;
+
+	int currentFrame;
+	float frameTime;
+	Matrix4 animModel;
+	Vector3 animPos;
+	int direction;
 
 	Frustum frameFrustum;
 

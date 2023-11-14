@@ -30,7 +30,7 @@ void main(void){
 		vec3 biasCoord = shadowNDC * 0.5f + 0.5f;
 		float shadowZ = texture(shadowTex, biasCoord.xy).x;
 		if(shadowZ < biasCoord.z) {
-			shadow = 0.25f;
+			shadow = 0.75f;
 		}
 	}
 

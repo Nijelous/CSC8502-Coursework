@@ -30,11 +30,11 @@ public:
 	float GetCameraDistance() const { return distanceFromCamera; }
 	void SetCameraDistance(float f) { distanceFromCamera = f; }
 
-	GLuint GetTexture() const { return texture; }
-	void SetTexture(GLuint tex) { texture = tex; }
+	GLuint GetTexture(int i) const { return textures[i]; }
+	void AddTexture(GLuint tex) { textures.push_back(tex); }
 
-	GLuint GetBumpMap() const { return bumpMap; }
-	void SetBumpMap(GLuint tex) { bumpMap = tex; }
+	GLuint GetBumpMap(int i) const { return bumpMaps[i]; }
+	void AddBumpMap(GLuint tex) { bumpMaps.push_back(tex); }
 
 	void AddChild(SceneNode* n);
 
@@ -58,7 +58,7 @@ protected:
 	std::vector<SceneNode*> children;
 	float distanceFromCamera;
 	float boundingRadius;
-	GLuint texture;
-	GLuint bumpMap;
+	std::vector<GLuint> textures;
+	std::vector<GLuint> bumpMaps;
 };
 
