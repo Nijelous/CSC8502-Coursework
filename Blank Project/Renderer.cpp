@@ -652,8 +652,6 @@ void Renderer::ClearNodeLists() {
 
 void Renderer::DrawNodes() {
 	BindShader(sceneShader);
-	viewMatrix = activeCamera->BuildViewMatrix();
-	projMatrix = Matrix4::Perspective(1.0f, 15000.0f, (float)width / (float)height, 45.0f);
 	glUniform1i(glGetUniformLocation(sceneShader->GetProgram(), "diffuseTex"), 0);
 
 	glUniform1i(glGetUniformLocation(sceneShader->GetProgram(), "bumpTex"), 1);
