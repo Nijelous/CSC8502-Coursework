@@ -26,6 +26,9 @@ int main()	{
 		if (Window::GetKeyboard()->KeyTriggered(KEYBOARD_F)) {
 			renderer.ToogleFog();
 		}
+		if (Window::GetKeyboard()->KeyTriggered(KEYBOARD_P)) {
+			renderer.PrintPosition();
+		}
 	}
 	return 0;
 }

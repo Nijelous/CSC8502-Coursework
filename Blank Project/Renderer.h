@@ -17,6 +17,7 @@ public:
 	 void RenderScene()	override;
 	 void ToggleThirdPersonCamera() { if (!planet) thirdPerson = !thirdPerson; }
 	 void ToogleFog() { if (!planet) hasFog = !hasFog; }
+	 void PrintPosition();
 protected:
 	void SwitchScene();
 

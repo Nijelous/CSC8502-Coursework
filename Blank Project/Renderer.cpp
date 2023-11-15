@@ -183,24 +183,34 @@ Renderer::Renderer(Window &parent) : OGLRenderer(parent) {
 	fogColour = Vector3(0.286f, 0.407f, 0);
 	skyMixing = 1.0f;
 
-	spaceCamera->AddNode(Vector3(0, 30, 175));
-	spaceCamera->AddNode(Vector3(-1500, 30, -700));
-	spaceCamera->AddNode(Vector3(-2100, -1360, -2480));
-	spaceCamera->AddNode(Vector3(-690, -2620, -4260));
-	spaceCamera->AddNode(Vector3(1790, -690, -3800));
-	spaceCamera->AddNode(Vector3(2300, -650, -1400));
-	spaceCamera->AddNode(Vector3(0, 30, 175));
-	spaceCamera->AddNode(Vector3(0, 30, 175));
-	spaceCamera->AddNode(boundingCentre);
+	spaceCamera->AddNode(Vector3(0, 30, 175), Vector2(-45, 0));
+	spaceCamera->AddNode(Vector3(-1500, 30, -700), Vector2(-44, 317));
+	spaceCamera->AddNode(Vector3(-2100, -1360, -2480), Vector2(-15, 255));
+	spaceCamera->AddNode(Vector3(-690, -2620, -4260), Vector2(15, 192));
+	spaceCamera->AddNode(Vector3(1790, -690, -3800), Vector2(-27, 136));
+	spaceCamera->AddNode(Vector3(2300, -650, -1400), Vector2(-30, 80));
+	spaceCamera->AddNode(Vector3(0, 30, 175), Vector2(-45, 0));
+	spaceCamera->AddNode(Vector3(0, 30, 175), Vector2(-45, 0));
+	spaceCamera->AddNode(boundingCentre, Vector2(-45, 0));
 
-	landCamera->AddNode(heightMap->GetHeightmapSize() * Vector3(0.5f, 0.0f, 0.5f) + Vector3(0.0f, 2400.0f, 0.0f));
-	landCamera->AddNode(heightMap->GetHeightmapSize() * Vector3(0.5f, 1.0f, 0.5f));
-	landCamera->AddNode(heightMap->GetHeightmapSize() * Vector3(0.9f, 1.0f, 0.9f));
-	landCamera->AddNode(heightMap->GetHeightmapSize() * Vector3(0.9f, 1.0f, 0.1f));
-	landCamera->AddNode(heightMap->GetHeightmapSize() * Vector3(0.6f, 1.0f, 0.5f));
-	landCamera->AddNode(heightMap->GetHeightmapSize() * Vector3(0.7f, 0.5f, 0.6f));
-	landCamera->AddNode(heightMap->GetHeightmapSize() * Vector3(0.7f, 0.5f, 0.6f));
-	landCamera->AddNode(heightMap->GetHeightmapSize() * Vector3(0.5f, 1.0f, 0.5f) + Vector3(0, 3000.0f, 0));
+	landCamera->AddNode(heightMap->GetHeightmapSize() * Vector3(0.5f, 0.0f, 0.5f) + Vector3(0.0f, 2400.0f, 0.0f), Vector2(-45, 0));
+	landCamera->AddNode(Vector3(4088, 1800, 4088), Vector2(-45, 0));
+	landCamera->AddNode(Vector3(4088, 301, 4088), Vector2(-11, 356));
+	landCamera->AddNode(Vector3(4262, 301, 2060), Vector2(-12, 296));
+	landCamera->AddNode(Vector3(4450, 301, 1000), Vector2(-11, 211));
+	landCamera->AddNode(Vector3(3090, 405, 796), Vector2(-6, 113));
+	landCamera->AddNode(Vector3(1120, 602, 144), Vector2(-17, 197));
+	landCamera->AddNode(Vector3(400, 300, 2100), Vector2(-6, 199));
+	landCamera->AddNode(Vector3(393, 330, 3010), Vector2(-12, 189));
+	landCamera->AddNode(Vector3(745, 50, 3630), Vector2(-2, 213));
+	landCamera->AddNode(Vector3(1270, 50, 4450), Vector2(1, 193));
+	landCamera->AddNode(Vector3(1710, 78, 6830), Vector2(1, 334));
+	landCamera->AddNode(Vector3(1320, 970, 5580), Vector2(-19, 309));
+	landCamera->AddNode(Vector3(1960, 970, 6920), Vector2(-13, 347));
+	landCamera->AddNode(Vector3(3440, 2140, 7790), Vector2(-27, 359));
+	landCamera->AddNode(Vector3(7370, 2000, 1041), Vector2(-28, 135));
+	landCamera->AddNode(Vector3(7370, 2000, 1041), Vector2(-28, 135));
+	landCamera->AddNode(Vector3(7370, 2600, 1041), Vector2(-28, 135));
 
 	init = true;
 }
@@ -379,6 +389,11 @@ void Renderer::RenderScene() {
 	}
 }
 
+void Renderer::PrintPosition()
+{
+	std::cout << activeCamera->GetPosition() << " " << activeCamera->GetPitch() << " " << activeCamera->GetYaw() << "\n";
+}
+
 void Renderer::SwitchScene() {
 	if (planet) LoadLand();
 	else LoadPlanet();
@@ -390,14 +405,15 @@ void Renderer::LoadPlanet()
 	activeLight = spaceLight;
 	activeCamera = spaceCamera;
 	density = 0;
-	if (InTransitionBounds()) landCamera->SetPosition(landCamera->GetNextNode());
+	landCamera->ResetCamera();
+	thirdPerson = false;
 }
 
 void Renderer::LoadLand()
 {
 	activeLight = (day ? dayLight : nightLight);
 	activeCamera = landCamera;
-	if (InTransitionBounds()) spaceCamera->SetPosition(spaceCamera->GetNextNode());
+	spaceCamera->ResetCamera();
 }
 
 bool Renderer::InTransitionBounds()
