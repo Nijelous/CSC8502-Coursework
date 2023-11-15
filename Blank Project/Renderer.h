@@ -15,7 +15,8 @@ public:
 	 ~Renderer(void);
 	 void UpdateScene(float dt)	override;
 	 void RenderScene()	override;
-
+	 void ToggleThirdPersonCamera() { if (!planet) thirdPerson = !thirdPerson; }
+	 void ToogleFog() { if (!planet) hasFog = !hasFog; }
 protected:
 	void SwitchScene();
 
@@ -32,14 +33,16 @@ protected:
 	void DrawAnimation();
 	void DrawShadowAnimation();
 
-	void DrawShadowScene();
+	void DrawShadowScene(Camera* camera);
 
-	void DrawWaterBlur();
-	void DrawFog();
+	void DrawWaterBlur(Camera* camera);
+	void DrawFogScreenSpace();
+	void DrawFogSceneSpace();
 	void PresentScene();
 
 	void SetNodes();
-	void BuildNodeLists(SceneNode* from);
+	void BuildNodeListsFrame(SceneNode* from);
+	void BuildNodeListsThirdPerson(SceneNode* from);
 	void SortNodeLists();
 	void ClearNodeLists();
 	void DrawNodes();
@@ -62,6 +65,7 @@ protected:
 	Shader* shadowShader;
 	Shader* shadowAnimShader;
 	Shader* fogShader;
+	Shader* fogSceneShader;
 	Shader* waterBlurShader;
 	Shader* presentShader;
 
@@ -72,6 +76,7 @@ protected:
 	Camera* activeCamera;
 	Camera* spaceCamera;
 	Camera* landCamera;
+	Camera* thirdPersonCamera;
 	Light* activeLight;
 	Light* spaceLight;
 	Light* dayLight;
@@ -106,6 +111,8 @@ protected:
 
 	bool planet = true;
 	bool day = true;
+	bool thirdPerson = false;
+	bool hasFog = true;
 
 	float yMax;
 
@@ -117,8 +124,13 @@ protected:
 	Matrix4 animModel;
 	Vector3 animPos;
 	int direction;
+	float density;
+	float gradient;
+	Vector3 fogColour;
+	float skyMixing;
 
 	Frustum frameFrustum;
+	Frustum thirdPersonFrustum;
 
 	vector<SceneNode*> transparentNodeList;
 	vector<SceneNode*> nodeList;
