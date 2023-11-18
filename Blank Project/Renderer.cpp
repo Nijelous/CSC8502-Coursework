@@ -5,132 +5,19 @@
 #include "../nclgl/HeightMap.h"
 #include "../nclgl/MeshAnimation.h"
 #include "../nclgl/MeshMaterial.h"
+#include "../nclgl/ParticleSystem.h"
 #include <algorithm>
 
 #define SHADOWSIZE 2048
 
+static const GLfloat particleVertices[] = { -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f, -0.5f, 0.5f, 0.0f, 0.5f, 0.5f, 0.0f };
+
 Renderer::Renderer(Window &parent) : OGLRenderer(parent) {
-	quad = Mesh::GenerateQuad();
-	sphere = Mesh::LoadFromMeshFile("Sphere.msh");
-	asteroid = Mesh::LoadFromMeshFile("Rock.msh");
-	tree = Mesh::LoadFromMeshFile("Tree.msh");
-	roleT = Mesh::LoadFromMeshFile("Role_T.msh");
-	anim = new MeshAnimation("Role_T.anm");
-	animMaterial = new MeshMaterial("Role_T.mat");
-
-	heightMap = new HeightMap(TEXTUREDIR"swampHeightmap.png");
-
-	planetTexture = SOIL_load_OGL_texture(TEXTUREDIR"Planet.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
-	planetBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"PlanetDOT3.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
-
-	asteroidTexture = SOIL_load_OGL_texture(TEXTUREDIR"Rock.png", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
-	asteroidBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"RockDOT3.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
-
-	surfaceTexture = SOIL_load_OGL_texture(TEXTUREDIR"Swampland.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
-	surfaceBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"SwamplandDOT3.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
-
-	barkTexture = SOIL_load_OGL_texture(TEXTUREDIR"Tree Bark.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
-	barkBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"Tree BarkDOT3.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
-
-	leavesTexture = SOIL_load_OGL_texture(TEXTUREDIR"Leaves.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
-	leavesBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"LeavesDOT3.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
-
-	waterTex = SOIL_load_OGL_texture(TEXTUREDIR"swampWater.TGA", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
-
-	spaceSkybox = SOIL_load_OGL_cubemap(
-		TEXTUREDIR"SkyBlue_right.png", TEXTUREDIR"SkyBlue_left.png",
-		TEXTUREDIR"SkyBlue_top.png", TEXTUREDIR"SkyBlue_bottom.png",
-		TEXTUREDIR"SkyBlue_front.png", TEXTUREDIR"SkyBlue_back.png", SOIL_LOAD_RGB, SOIL_CREATE_NEW_ID, 0);
-
-	landDaySkybox = SOIL_load_OGL_cubemap(
-		TEXTUREDIR"GreenSky_right.jpg", TEXTUREDIR"GreenSky_left.jpg",
-		TEXTUREDIR"GreenSky_up.jpg", TEXTUREDIR"GreenSky_down.jpg",
-		TEXTUREDIR"GreenSky_front.jpg", TEXTUREDIR"GreenSky_back.jpg", SOIL_LOAD_RGB, SOIL_CREATE_NEW_ID, 0);
-
-	landNightSkybox = SOIL_load_OGL_cubemap(
-		TEXTUREDIR"LightGreen_right.png", TEXTUREDIR"LightGreen_left.png",
-		TEXTUREDIR"LightGreen_top.png", TEXTUREDIR"LightGreen_bottom.png",
-		TEXTUREDIR"LightGreen_front.png", TEXTUREDIR"LightGreen_back.png", SOIL_LOAD_RGB, SOIL_CREATE_NEW_ID, 0);
-
-	for (int i = 0; i < roleT->GetSubMeshCount(); i++) {
-		const MeshMaterialEntry* matEntry = animMaterial->GetMaterialForLayer(i);
-
-		const string* filename = nullptr;
-		matEntry->GetEntry("Diffuse", &filename);
-		string path = TEXTUREDIR + *filename;
-		GLuint texID = SOIL_load_OGL_texture(path.c_str(), SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y);
-		matTextures.emplace_back(texID);
-	}
-
-	if (!planetTexture || !planetBumpMap || !asteroidTexture || !asteroidBumpMap || !surfaceTexture 
-		|| !surfaceBumpMap || !barkTexture || !barkBumpMap || !waterTex || !spaceSkybox 
-		|| !landDaySkybox || !landNightSkybox) return;
-
-	skyboxShader = new Shader("SkyboxVertex.glsl", "SkyboxFragment.glsl");
-	sceneShader = new Shader("PerPixelSceneVertex.glsl", "PerPixelSceneFragment.glsl");
-	animShader = new Shader("SkinningVertex.glsl", "TexturedFragment.glsl");
-	waterShader = new Shader("ReflectVertex.glsl", "ReflectFragment.glsl");
-	shadowShader = new Shader("ShadowVert.glsl", "ShadowFrag.glsl");
-	shadowAnimShader = new Shader("SkinningShadowVert.glsl", "ShadowFrag.glsl");
-	fogShader = new Shader("FogVertex.glsl", "FogFragment.glsl");
-	fogSceneShader = new Shader("FogVertex.glsl", "FogSceneFrag.glsl");
-	waterBlurShader = new Shader("WaterBlurVert.glsl", "WaterBlurFrag.glsl");
-	presentShader = new Shader("TexturedVertex.glsl", "TexturedFragment.glsl");
-
-	if (!skyboxShader->LoadSuccess() || !sceneShader->LoadSuccess() || !animShader->LoadSuccess() || !waterShader->LoadSuccess()
-		|| !shadowShader->LoadSuccess() || !fogShader->LoadSuccess() || !fogSceneShader->LoadSuccess() || !waterBlurShader->LoadSuccess()
-		|| !presentShader->LoadSuccess()) return;
-
-	glGenTextures(1, &shadowTex);
-	glBindTexture(GL_TEXTURE_2D, shadowTex);
-	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOWSIZE, SHADOWSIZE, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-
-	glBindTexture(GL_TEXTURE_2D, 0);
-
-	glGenFramebuffers(1, &shadowFBO);
-	glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTex, 0);
-	glDrawBuffer(GL_NONE);
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-	glGenTextures(1, &bufferDepthTex);
-	glBindTexture(GL_TEXTURE_2D, bufferDepthTex);
-	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, width, height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
-
-	for (int i = 0; i < 2; i++) {
-		glGenTextures(1, &bufferColourTex[i]);
-		glBindTexture(GL_TEXTURE_2D, bufferColourTex[i]);
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-	}
-
-	glGenFramebuffers(1, &bufferFBO);
-	glGenFramebuffers(1, &postProcessFBO);
-
-	glBindFramebuffer(GL_FRAMEBUFFER, bufferFBO);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, bufferDepthTex, 0);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, bufferDepthTex, 0);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bufferColourTex[0], 0);
-
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE || !bufferDepthTex || !bufferColourTex[0]) return;
-
-	glBindFramebuffer(GL_FRAMEBUFFER, postProcessFBO);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bufferColourTex[1], 0);
-
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) return;
-
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	
+	InitializeMeshes();
+	if (!InitializeTextures()) return;
+	if (!InitializeShaders()) return;
+	if (!InitializeBuffers()) return;
 
 	SetTextureMirrorRepeating(planetTexture, true);
 	SetTextureMirrorRepeating(planetBumpMap, true);
@@ -140,77 +27,13 @@ Renderer::Renderer(Window &parent) : OGLRenderer(parent) {
 	SetTextureRepeating(surfaceBumpMap, true);
 	SetTextureRepeating(waterTex, true);
 
-	spaceCamera = new Camera(-45.0f, 0.0f, Vector3(0, 30, 175));
-
-	landCamera = new Camera(-45.0f, 0.0f, heightMap->GetHeightmapSize() * Vector3(0.5f, 0.0f, 0.5f) + Vector3(0.0f, 2400.0f, 0.0f));
-
-	thirdPersonCamera = new Camera(-25.0f, 0.0f, animPos + Vector3(50, 300, 300));
-
-	activeCamera = spaceCamera;
-
-	spaceLight = new Light(Vector3(100.0f, 100.0f, 100.0f), Vector4(1, 1, 1, 1), 10000.0f);
-
-	dayLight = new Light(heightMap->GetHeightmapSize() * Vector3(0.5f, 0.0f, 0.0f), Vector4(1, 1, 1, 1), 40000);
-
-	nightLight = new Light(heightMap->GetHeightmapSize() * Vector3(0.5f, 0.0f, 1.0f), Vector4(0.678f, 0.847f, 0.901f, 1), 20000);
-
-	activeLight = spaceLight;
-
-	spaceRoot = new SceneNode();
-
-	landRoot = new SceneNode();
-
-	SetNodes();
-
-	projMatrix = Matrix4::Perspective(1.0f, 15000.0f, (float)width / (float)height, 45.0f);
+	SetVariables();
+	SetCameraNodes();
 
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
-
-	waterRotate = 0.0f;
-	waterCycle = 0.0f;
-
-	yMax = 2500.0f;
-
-	currentFrame = 0;
-	frameTime = 0.0f;
-	direction = 1;
-
-	density = 0;
-	gradient = 1.5f;
-	fogColour = Vector3(0.286f, 0.407f, 0);
-	skyMixing = 1.0f;
-
-	spaceCamera->AddNode(Vector3(0, 30, 175), Vector2(-45, 0));
-	spaceCamera->AddNode(Vector3(-1500, 30, -700), Vector2(-44, 317));
-	spaceCamera->AddNode(Vector3(-2100, -1360, -2480), Vector2(-15, 255));
-	spaceCamera->AddNode(Vector3(-690, -2620, -4260), Vector2(15, 192));
-	spaceCamera->AddNode(Vector3(1790, -690, -3800), Vector2(-27, 136));
-	spaceCamera->AddNode(Vector3(2300, -650, -1400), Vector2(-30, 80));
-	spaceCamera->AddNode(Vector3(0, 30, 175), Vector2(-45, 0));
-	spaceCamera->AddNode(Vector3(0, 30, 175), Vector2(-45, 0));
-	spaceCamera->AddNode(boundingCentre, Vector2(-45, 0));
-
-	landCamera->AddNode(heightMap->GetHeightmapSize() * Vector3(0.5f, 0.0f, 0.5f) + Vector3(0.0f, 2400.0f, 0.0f), Vector2(-45, 0));
-	landCamera->AddNode(Vector3(4088, 1800, 4088), Vector2(-45, 0));
-	landCamera->AddNode(Vector3(4088, 301, 4088), Vector2(-11, 356));
-	landCamera->AddNode(Vector3(4262, 301, 2060), Vector2(-12, 296));
-	landCamera->AddNode(Vector3(4450, 301, 1000), Vector2(-11, 211));
-	landCamera->AddNode(Vector3(3090, 405, 796), Vector2(-6, 113));
-	landCamera->AddNode(Vector3(1120, 602, 144), Vector2(-17, 197));
-	landCamera->AddNode(Vector3(400, 300, 2100), Vector2(-6, 199));
-	landCamera->AddNode(Vector3(393, 330, 3010), Vector2(-12, 189));
-	landCamera->AddNode(Vector3(745, 50, 3630), Vector2(-2, 213));
-	landCamera->AddNode(Vector3(1270, 50, 4450), Vector2(1, 193));
-	landCamera->AddNode(Vector3(1710, 78, 6830), Vector2(1, 334));
-	landCamera->AddNode(Vector3(1320, 970, 5580), Vector2(-19, 309));
-	landCamera->AddNode(Vector3(1960, 970, 6920), Vector2(-13, 347));
-	landCamera->AddNode(Vector3(3440, 2140, 7790), Vector2(-27, 359));
-	landCamera->AddNode(Vector3(7370, 2000, 1041), Vector2(-28, 135));
-	landCamera->AddNode(Vector3(7370, 2000, 1041), Vector2(-28, 135));
-	landCamera->AddNode(Vector3(7370, 2600, 1041), Vector2(-28, 135));
 
 	init = true;
 }
@@ -222,6 +45,9 @@ Renderer::~Renderer(void) {
 	glDeleteTextures(2, bufferColourTex);
 	glDeleteFramebuffers(1, &bufferFBO);
 	glDeleteFramebuffers(1, &postProcessFBO);
+	glDeleteBuffers(1, &particleTransformVBO);
+	glDeleteBuffers(1, &particleVertexVBO);
+	glDeleteVertexArrays(1, &particleVAO);
 	delete skyboxShader;
 	delete sceneShader;
 	delete animShader;
@@ -239,6 +65,7 @@ Renderer::~Renderer(void) {
 	delete roleT;
 	delete anim;
 	delete animMaterial;
+	delete rain;
 	delete spaceRoot;
 	delete landRoot;
 	delete activeCamera;
@@ -284,6 +111,8 @@ void Renderer::UpdateScene(float dt) {
 
 		DayNightCycle();
 
+		if (raining) rain->UpdateParticles(dt, heightMap);
+
 		frameTime -= dt;
 		while (frameTime < 0.0f) {
 			currentFrame = (currentFrame + 1) % anim->GetFrameCount();
@@ -304,7 +133,6 @@ void Renderer::UpdateScene(float dt) {
 }
 
 void Renderer::RenderScene() {
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 	BuildNodeListsFrame(planet ? spaceRoot : landRoot);
 	SortNodeLists();
@@ -317,6 +145,7 @@ void Renderer::RenderScene() {
 	if (!planet) {
 		DrawWater();
 		DrawHeightMap();
+		if(raining) DrawParticles();
 		DrawAnimation();
 	}
 	DrawNodes();
@@ -357,6 +186,7 @@ void Renderer::RenderScene() {
 		if (!planet) {
 			DrawWater();
 			DrawHeightMap();
+			if(raining) DrawParticles();
 			DrawAnimation();
 		}
 		DrawNodes();
@@ -389,9 +219,239 @@ void Renderer::RenderScene() {
 	}
 }
 
+void Renderer::ToggleRain()
+{
+	if (!planet) { 
+		raining = !raining; 
+		rain->ClearParticleList(); 
+	}
+}
+
 void Renderer::PrintPosition()
 {
 	std::cout << activeCamera->GetPosition() << " " << activeCamera->GetPitch() << " " << activeCamera->GetYaw() << "\n";
+}
+
+void Renderer::InitializeMeshes()
+{
+	quad = Mesh::GenerateQuad();
+	sphere = Mesh::LoadFromMeshFile("Sphere.msh");
+	asteroid = Mesh::LoadFromMeshFile("Rock.msh");
+	tree = Mesh::LoadFromMeshFile("Tree.msh");
+	roleT = Mesh::LoadFromMeshFile("Role_T.msh");
+	anim = new MeshAnimation("Role_T.anm");
+	animMaterial = new MeshMaterial("Role_T.mat");
+
+	heightMap = new HeightMap(TEXTUREDIR"swampHeightmap.png");
+}
+
+bool Renderer::InitializeTextures()
+{
+	planetTexture = SOIL_load_OGL_texture(TEXTUREDIR"Planet.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
+	planetBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"PlanetDOT3.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
+
+	asteroidTexture = SOIL_load_OGL_texture(TEXTUREDIR"Rock.png", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
+	asteroidBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"RockDOT3.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
+
+	surfaceTexture = SOIL_load_OGL_texture(TEXTUREDIR"Swampland.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
+	surfaceBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"SwamplandDOT3.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
+
+	barkTexture = SOIL_load_OGL_texture(TEXTUREDIR"Tree Bark.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
+	barkBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"Tree BarkDOT3.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
+
+	leavesTexture = SOIL_load_OGL_texture(TEXTUREDIR"Leaves.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
+	leavesBumpMap = SOIL_load_OGL_texture(TEXTUREDIR"LeavesDOT3.JPG", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
+
+	waterTex = SOIL_load_OGL_texture(TEXTUREDIR"swampWater.TGA", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS);
+
+	spaceSkybox = SOIL_load_OGL_cubemap(
+		TEXTUREDIR"SkyBlue_right.png", TEXTUREDIR"SkyBlue_left.png",
+		TEXTUREDIR"SkyBlue_top.png", TEXTUREDIR"SkyBlue_bottom.png",
+		TEXTUREDIR"SkyBlue_front.png", TEXTUREDIR"SkyBlue_back.png", SOIL_LOAD_RGB, SOIL_CREATE_NEW_ID, 0);
+
+	landDaySkybox = SOIL_load_OGL_cubemap(
+		TEXTUREDIR"GreenSky_right.jpg", TEXTUREDIR"GreenSky_left.jpg",
+		TEXTUREDIR"GreenSky_up.jpg", TEXTUREDIR"GreenSky_down.jpg",
+		TEXTUREDIR"GreenSky_front.jpg", TEXTUREDIR"GreenSky_back.jpg", SOIL_LOAD_RGB, SOIL_CREATE_NEW_ID, 0);
+
+	landNightSkybox = SOIL_load_OGL_cubemap(
+		TEXTUREDIR"LightGreen_right.png", TEXTUREDIR"LightGreen_left.png",
+		TEXTUREDIR"LightGreen_top.png", TEXTUREDIR"LightGreen_bottom.png",
+		TEXTUREDIR"LightGreen_front.png", TEXTUREDIR"LightGreen_back.png", SOIL_LOAD_RGB, SOIL_CREATE_NEW_ID, 0);
+
+	for (int i = 0; i < roleT->GetSubMeshCount(); i++) {
+		const MeshMaterialEntry* matEntry = animMaterial->GetMaterialForLayer(i);
+
+		const string* filename = nullptr;
+		matEntry->GetEntry("Diffuse", &filename);
+		string path = TEXTUREDIR + *filename;
+		GLuint texID = SOIL_load_OGL_texture(path.c_str(), SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y);
+		matTextures.emplace_back(texID);
+	}
+
+	return (planetTexture && planetBumpMap && asteroidTexture && asteroidBumpMap && surfaceTexture
+		&& surfaceBumpMap && barkTexture && barkBumpMap && waterTex && spaceSkybox
+		&& landDaySkybox && landNightSkybox);
+}
+
+bool Renderer::InitializeShaders()
+{
+	skyboxShader = new Shader("SkyboxVertex.glsl", "SkyboxFragment.glsl");
+	sceneShader = new Shader("PerPixelSceneVertex.glsl", "PerPixelSceneFragment.glsl");
+	animShader = new Shader("SkinningVertex.glsl", "TexturedFragment.glsl");
+	waterShader = new Shader("ReflectVertex.glsl", "ReflectFragment.glsl");
+	shadowShader = new Shader("ShadowVert.glsl", "ShadowFrag.glsl");
+	shadowAnimShader = new Shader("SkinningShadowVert.glsl", "ShadowFrag.glsl");
+	particleShader = new Shader("ParticleVertex.glsl", "ParticleFragment.glsl");
+	fogShader = new Shader("FogVertex.glsl", "FogFragment.glsl");
+	fogSceneShader = new Shader("FogVertex.glsl", "FogSceneFrag.glsl");
+	waterBlurShader = new Shader("WaterBlurVert.glsl", "WaterBlurFrag.glsl");
+	presentShader = new Shader("TexturedVertex.glsl", "TexturedFragment.glsl");
+
+	return (skyboxShader->LoadSuccess() && sceneShader->LoadSuccess() && animShader->LoadSuccess() && waterShader->LoadSuccess()
+		&& shadowShader->LoadSuccess() && fogShader->LoadSuccess() && fogSceneShader->LoadSuccess() && waterBlurShader->LoadSuccess()
+		&& presentShader->LoadSuccess() && particleShader->LoadSuccess());
+}
+
+bool Renderer::InitializeBuffers()
+{
+	glGenTextures(1, &shadowTex);
+	glBindTexture(GL_TEXTURE_2D, shadowTex);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOWSIZE, SHADOWSIZE, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+
+	glGenFramebuffers(1, &shadowFBO);
+	glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTex, 0);
+	glDrawBuffer(GL_NONE);
+
+	glGenTextures(1, &bufferDepthTex);
+	glBindTexture(GL_TEXTURE_2D, bufferDepthTex);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, width, height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
+
+	for (int i = 0; i < 2; i++) {
+		glGenTextures(1, &bufferColourTex[i]);
+		glBindTexture(GL_TEXTURE_2D, bufferColourTex[i]);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	}
+
+	glGenFramebuffers(1, &bufferFBO);
+	glGenFramebuffers(1, &postProcessFBO);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, bufferFBO);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, bufferDepthTex, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, bufferDepthTex, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bufferColourTex[0], 0);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE || !bufferDepthTex || !bufferColourTex[0]) return false;
+
+	glBindFramebuffer(GL_FRAMEBUFFER, postProcessFBO);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bufferColourTex[1], 0);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) return false;
+
+	glGenVertexArrays(1, &particleVAO);
+	glBindVertexArray(particleVAO);
+
+	glGenBuffers(1, &particleVertexVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, particleVertexVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(particleVertices), particleVertices, GL_STATIC_DRAW);
+
+	glGenBuffers(1, &particleTransformVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, particleTransformVBO);
+	glBufferData(GL_ARRAY_BUFFER, 180000, NULL, GL_STREAM_DRAW);
+
+	glBindVertexArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	return true;
+}
+
+void Renderer::SetVariables()
+{
+	spaceCamera = new Camera(-45.0f, 0.0f, Vector3(0, 30, 175));
+	landCamera = new Camera(-45.0f, 0.0f, heightMap->GetHeightmapSize() * Vector3(0.5f, 0.0f, 0.5f) + Vector3(0.0f, 2400.0f, 0.0f));
+	thirdPersonCamera = new Camera(-25.0f, 0.0f, animPos + Vector3(50, 300, 300));
+	activeCamera = spaceCamera;
+
+	spaceLight = new Light(Vector3(100.0f, 100.0f, 100.0f), Vector4(1, 1, 1, 1), 10000.0f);
+	dayLight = new Light(heightMap->GetHeightmapSize() * Vector3(0.5f, 0.0f, 0.0f), Vector4(1, 1, 1, 1), 40000);
+	nightLight = new Light(heightMap->GetHeightmapSize() * Vector3(0.5f, 0.0f, 1.0f), Vector4(0.678f, 0.847f, 0.901f, 1), 20000);
+	activeLight = spaceLight;
+
+	spaceRoot = new SceneNode();
+	landRoot = new SceneNode();
+	SetNodes();
+
+	projMatrix = Matrix4::Perspective(1.0f, 15000.0f, (float)width / (float)height, 45.0f);
+
+	waterRotate = 0.0f;
+	waterCycle = 0.0f;
+
+	yMax = 2500.0f;
+
+	currentFrame = 0;
+	frameTime = 0.0f;
+	direction = 1;
+
+	density = 0;
+	gradient = 1.5f;
+	fogColour = Vector3(0.286f, 0.407f, 0);
+	skyMixing = 1.0f;
+
+	rain = new ParticleSystem();
+	rain->SetDirection(Vector3(0, -1, 0));
+	rain->SetGravityComp(0.3f);
+	rain->SetLifeLength(1000);
+	rain->SetParticlesPerSecond(350);
+	rain->SetSpeed(25);
+	rain->SetSpawnQuad(Vector3(0, 2000, 0), Vector3(heightMap->GetHeightmapSize().x, 2000, heightMap->GetHeightmapSize().z));
+	rain->SetParticleSplit(true);
+}
+
+void Renderer::SetCameraNodes()
+{
+	spaceCamera->AddNode(Vector3(0, 30, 175), Vector2(-45, 0));
+	spaceCamera->AddNode(Vector3(-1500, 30, -700), Vector2(-44, 317));
+	spaceCamera->AddNode(Vector3(-2100, -1360, -2480), Vector2(-15, 255));
+	spaceCamera->AddNode(Vector3(-690, -2620, -4260), Vector2(15, 192));
+	spaceCamera->AddNode(Vector3(1790, -690, -3800), Vector2(-27, 136));
+	spaceCamera->AddNode(Vector3(2300, -650, -1400), Vector2(-30, 80));
+	spaceCamera->AddNode(Vector3(0, 30, 175), Vector2(-45, 0));
+	spaceCamera->AddNode(Vector3(0, 30, 175), Vector2(-45, 0));
+	spaceCamera->AddNode(boundingCentre, Vector2(-45, 0));
+
+	landCamera->AddNode(heightMap->GetHeightmapSize() * Vector3(0.5f, 0.0f, 0.5f) + Vector3(0.0f, 2400.0f, 0.0f), Vector2(-45, 0));
+	landCamera->AddNode(Vector3(4088, 1800, 4088), Vector2(-45, 0));
+	landCamera->AddNode(Vector3(4088, 301, 4088), Vector2(-11, 356));
+	landCamera->AddNode(Vector3(4262, 301, 2060), Vector2(-12, 296));
+	landCamera->AddNode(Vector3(4450, 301, 1000), Vector2(-11, 211));
+	landCamera->AddNode(Vector3(3090, 405, 796), Vector2(-6, 113));
+	landCamera->AddNode(Vector3(1120, 602, 144), Vector2(-17, 197));
+	landCamera->AddNode(Vector3(400, 300, 2100), Vector2(-6, 199));
+	landCamera->AddNode(Vector3(393, 330, 3010), Vector2(-12, 189));
+	landCamera->AddNode(Vector3(745, 50, 3630), Vector2(-2, 213));
+	landCamera->AddNode(Vector3(1270, 50, 4450), Vector2(1, 193));
+	landCamera->AddNode(Vector3(1710, 78, 6830), Vector2(1, 334));
+	landCamera->AddNode(Vector3(1320, 970, 5580), Vector2(-19, 309));
+	landCamera->AddNode(Vector3(1960, 970, 6920), Vector2(-13, 347));
+	landCamera->AddNode(Vector3(3440, 2140, 7790), Vector2(-27, 359));
+	landCamera->AddNode(Vector3(7370, 2000, 1041), Vector2(-28, 135));
+	landCamera->AddNode(Vector3(7370, 2000, 1041), Vector2(-28, 135));
+	landCamera->AddNode(Vector3(7370, 2600, 1041), Vector2(-28, 135));
 }
 
 void Renderer::SwitchScene() {
@@ -573,6 +633,32 @@ void Renderer::DrawShadowAnimation()
 	}
 }
 
+void Renderer::DrawParticles()
+{
+    BindShader(particleShader);
+	glBindVertexArray(particleVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, particleTransformVBO);
+	glBufferData(GL_ARRAY_BUFFER, 180000, NULL, GL_STREAM_DRAW);
+	glBufferSubData(GL_ARRAY_BUFFER, 0, 180000, rain->GetTranslations());
+	
+	glEnableVertexAttribArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, particleVertexVBO);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+	glEnableVertexAttribArray(1);
+	glBindBuffer(GL_ARRAY_BUFFER, particleTransformVBO);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+	glVertexAttribDivisor(0, 0);
+	glVertexAttribDivisor(1, 1);
+	modelMatrix.ToIdentity();
+	UpdateShaderMatrices();
+	glUniform1f(glGetUniformLocation(particleShader->GetProgram(), "scale"), 1);
+	glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, rain->GetParticleCount());
+	glDisableVertexAttribArray(0);
+	glDisableVertexAttribArray(1);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindVertexArray(0);
+}
+
 void Renderer::DrawShadowScene(Camera* camera) {
 	glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
 
@@ -584,7 +670,7 @@ void Renderer::DrawShadowScene(Camera* camera) {
 
 	if (!planet) {
 		viewMatrix = Matrix4::BuildViewMatrix(activeLight->GetPosition() * Vector3(1.0f, 1.0f, 1.0f), heightMap->GetHeightmapSize() * Vector3(0.5f, 0.0f, 0.5f));
-		projMatrix = Matrix4::Perspective(1000, 17000, 1, 90);
+		projMatrix = Matrix4::Perspective(100, 17000, 1, 90);
 	}
 	else {
 		viewMatrix = Matrix4::BuildViewMatrix(activeLight->GetPosition(), boundingCentre);

@@ -8,6 +8,7 @@ class Light;
 class HeightMap;
 class MeshAnimation;
 class MeshMaterial;
+class ParticleSystem;
 
 class Renderer : public OGLRenderer	{
 public:
@@ -17,8 +18,16 @@ public:
 	 void RenderScene()	override;
 	 void ToggleThirdPersonCamera() { if (!planet) thirdPerson = !thirdPerson; }
 	 void ToogleFog() { if (!planet) hasFog = !hasFog; }
+	 void ToggleRain();
 	 void PrintPosition();
 protected:
+	void InitializeMeshes();
+	bool InitializeTextures();
+	bool InitializeShaders();
+	bool InitializeBuffers();
+	void SetVariables();
+	void SetCameraNodes();
+
 	void SwitchScene();
 
 	void LoadPlanet();
@@ -33,6 +42,7 @@ protected:
 	void DrawWater();
 	void DrawAnimation();
 	void DrawShadowAnimation();
+	void DrawParticles();
 
 	void DrawShadowScene(Camera* camera);
 
@@ -58,6 +68,7 @@ protected:
 	HeightMap* heightMap;
 	MeshAnimation* anim;
 	MeshMaterial* animMaterial;
+	ParticleSystem* rain;
 
 	Shader* skyboxShader;
 	Shader* sceneShader;
@@ -65,6 +76,7 @@ protected:
 	Shader* waterShader;
 	Shader* shadowShader;
 	Shader* shadowAnimShader;
+	Shader* particleShader;
 	Shader* fogShader;
 	Shader* fogSceneShader;
 	Shader* waterBlurShader;
@@ -82,6 +94,10 @@ protected:
 	Light* spaceLight;
 	Light* dayLight;
 	Light* nightLight;
+
+	GLuint particleVertexVBO;
+	GLuint particleTransformVBO;
+	GLuint particleVAO;
 
 	GLuint shadowFBO;
 	GLuint bufferFBO;
@@ -114,6 +130,7 @@ protected:
 	bool day = true;
 	bool thirdPerson = false;
 	bool hasFog = true;
+	bool raining = true;
 
 	float yMax;
 

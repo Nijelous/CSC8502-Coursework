@@ -26,6 +26,8 @@ public:
 	float	GetTimeDeltaSeconds()	const { return timeDelta; };
 	float	GetTimeDeltaMSec()		const { return timeDelta * 1000.0f; };
 
+	void StartTimer() { firstPoint = std::chrono::high_resolution_clock::now(); nowPoint = firstPoint; }
+
 	void	Tick();
 protected:
 	typedef  std::chrono::time_point<std::chrono::high_resolution_clock>  Timepoint;

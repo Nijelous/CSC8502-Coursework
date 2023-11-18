@@ -2,7 +2,7 @@
 #include "Renderer.h"
 
 int main()	{
-	Window w("Coursework: Dagobah (ish)", 1280, 720, false);
+	Window w("Coursework: Dagobah (ish)", 1280, 760, false);
 
 	if(!w.HasInitialised()) return -1;
 
@@ -11,6 +11,8 @@ int main()	{
 
 	w.LockMouseToWindow(true);
 	w.ShowOSPointer(false);
+
+	w.GetTimer()->StartTimer();
 
 	while(w.UpdateWindow()  && !Window::GetKeyboard()->KeyDown(KEYBOARD_ESCAPE)){
 		renderer.UpdateScene(w.GetTimer()->GetTimeDeltaSeconds());
@@ -28,6 +30,9 @@ int main()	{
 		}
 		if (Window::GetKeyboard()->KeyTriggered(KEYBOARD_P)) {
 			renderer.PrintPosition();
+		}
+		if (Window::GetKeyboard()->KeyTriggered(KEYBOARD_R)) {
+			renderer.ToggleRain();
 		}
 	}
 	return 0;
