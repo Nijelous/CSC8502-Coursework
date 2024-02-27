@@ -1,4 +1,4 @@
-# What I programmed (By Folder):
+# What I Programmed (By Folder):
 
 **Blank Project:**
 - Renderer.cpp & Renderer.h
